@@ -5,14 +5,13 @@ import ffmpegStatic from 'ffmpeg-static'
 import ffprobeStatic from 'ffprobe-static'
 
 const isWin = process.platform === 'win32'
-const ytdlpName = isWin ? 'yt-dlp.exe' : 'yt-dlp'
 
 /** Read-only bundled resources: project root in dev, process.resourcesPath when packaged. */
 function resourcesDir(): string {
   return app.isPackaged ? process.resourcesPath : join(app.getAppPath(), 'resources')
 }
 
-/** Writable per-user bin dir where the mutable, self-updating yt-dlp lives. */
+/** Writable per-user bin dir where the mutable, self-updating yt-dlp zipapp lives. */
 export function userBinDir(): string {
   const dir = join(app.getPath('userData'), 'bin')
   mkdirSync(dir, { recursive: true })
@@ -20,19 +19,34 @@ export function userBinDir(): string {
 }
 
 /**
- * yt-dlp must be runnable AND self-updatable (`yt-dlp -U` rewrites its own binary),
- * so it can never live inside the signed .app — updating it there would invalidate
- * the code signature. We seed it from read-only resources into userData/bin on first
- * run and always run that copy.
+ * Bundled standalone Python interpreter (per-platform, read-only in resources).
+ * We run yt-dlp as a pure-python zipapp under this Python — the PyInstaller
+ * `yt-dlp_macos` binary re-extracts ~38MB and is scanned by Gatekeeper on EVERY
+ * run (~30s); the zipapp starts in <1s.
+ */
+export function pythonPath(): string {
+  const base = join(resourcesDir(), 'python')
+  return isWin ? join(base, 'python.exe') : join(base, 'bin', 'python3')
+}
+
+/**
+ * yt-dlp zipapp (cross-platform pure python). Seeded read-only, copied to
+ * userData/bin on first run so it can self-update there without invalidating
+ * the signed app bundle.
  */
 export function ensureYtDlp(): string {
-  const seeded = join(resourcesDir(), 'bin', ytdlpName)
-  const userCopy = join(userBinDir(), ytdlpName)
-  if (!existsSync(userCopy) && existsSync(seeded)) {
-    copyFileSync(seeded, userCopy)
+  const seed = join(resourcesDir(), 'engine', 'yt-dlp')
+  const userCopy = join(userBinDir(), 'yt-dlp')
+  if (!existsSync(userCopy) && existsSync(seed)) {
+    copyFileSync(seed, userCopy)
     if (!isWin) chmodSync(userCopy, 0o755)
   }
   return userCopy
+}
+
+/** Build the command + argv to run yt-dlp: [python, zipapp, ...extra]. */
+export function ytDlpArgs(extra: string[]): { cmd: string; args: string[] } {
+  return { cmd: pythonPath(), args: [ensureYtDlp(), ...extra] }
 }
 
 /** Normalize a node_modules binary path so it resolves inside app.asar.unpacked when packaged. */
@@ -56,10 +70,6 @@ export function ffprobePath(): string {
  */
 export function engineEnv(): NodeJS.ProcessEnv {
   const extra = [dirname(ffmpegPath()), dirname(ffprobePath())].filter(Boolean)
-  const path = [...extra, process.env.PATH ?? ''].join(pathDelimiter())
+  const path = [...extra, process.env.PATH ?? ''].join(isWin ? ';' : ':')
   return { ...process.env, PATH: path }
-}
-
-function pathDelimiter(): string {
-  return process.platform === 'win32' ? ';' : ':'
 }

@@ -1,7 +1,8 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createInterface } from 'node:readline'
-import { readdirSync, unlinkSync } from 'node:fs'
+import { readdirSync, unlinkSync, createWriteStream, chmodSync } from 'node:fs'
+import { get as httpsGet } from 'node:https'
 import { join } from 'node:path'
 import type {
   ProbeResult,
@@ -11,7 +12,7 @@ import type {
   ProgressEvent,
   DownloadErrorKind
 } from '../shared/types'
-import { ensureYtDlp, ffmpegPath, engineEnv } from './binaries'
+import { ytDlpArgs, ffmpegPath, engineEnv, userBinDir } from './binaries'
 
 const execFileP = promisify(execFile)
 
@@ -23,10 +24,10 @@ const canceled = new Set<string>()
 
 /** Resolve a URL to a typed info_dict via `yt-dlp -J`. Throws on failure. */
 export async function probe(url: string): Promise<ProbeResult> {
-  const ytdlp = ensureYtDlp()
+  const { cmd, args } = ytDlpArgs(['-J', '--no-warnings', '--no-playlist', url])
   let stdout: string
   try {
-    const res = await execFileP(ytdlp, ['-J', '--no-warnings', '--no-playlist', url], {
+    const res = await execFileP(cmd, args, {
       timeout: 90_000,
       maxBuffer: 64 * 1024 * 1024,
       env: engineEnv()
@@ -45,23 +46,25 @@ export async function probe(url: string): Promise<ProbeResult> {
   const formats: FormatInfo[] = rawFormats
     .filter((f) => f.url || f.fragments)
     .map((f) => {
-      const vcodec = (f.vcodec as string) || 'none'
-      const acodec = (f.acodec as string) || 'none'
+      // yt-dlp uses the string 'none' for a truly-absent stream and null/absent for
+      // "unknown" (e.g. the generic extractor doesn't probe codecs). Keep them distinct.
+      const vcodec = normCodec(f.vcodec)
+      const acodec = normCodec(f.acodec)
       const height = (f.height as number) ?? null
+      const isVideoOnly = acodec === 'none' && vcodec !== 'none' && vcodec !== null
+      const isAudioOnly = vcodec === 'none' && acodec !== 'none' && acodec !== null
       return {
         formatId: String(f.format_id),
         ext: (f.ext as string) || '',
         height,
         fps: (f.fps as number) ?? null,
-        vcodec,
-        acodec,
+        vcodec: vcodec ?? 'inconnu',
+        acodec: acodec ?? 'inconnu',
         tbr: (f.tbr as number) ?? null,
         filesize: (f.filesize as number) ?? (f.filesize_approx as number) ?? null,
-        isVideoOnly: acodec === 'none' && vcodec !== 'none',
-        isAudioOnly: vcodec === 'none' && acodec !== 'none',
-        resolution:
-          (f.resolution as string) ||
-          (height ? `${(f.width as number) ?? '?'}x${height}` : vcodec === 'none' ? 'audio only' : '?'),
+        isVideoOnly,
+        isAudioOnly,
+        resolution: resolutionLabel(f, height, isAudioOnly),
         note: (f.format_note as string) || ''
       }
     })
@@ -91,8 +94,8 @@ export function download(
 ): Promise<DownloadResult> {
   if (req.audioOnly === false && !req.format) req.format = 'bv*+ba/b'
 
-  const args = buildArgs(req)
-  const child = spawn(ensureYtDlp(), args, { env: engineEnv() })
+  const { cmd, args } = ytDlpArgs(buildArgs(req))
+  const child = spawn(cmd, args, { env: engineEnv() })
   running.set(req.id, child)
 
   let finalPath: string | null = null
@@ -163,11 +166,36 @@ export function cancel(id: string): boolean {
   return true
 }
 
-/** Self-update the yt-dlp binary in userData/bin (never touches the signed bundle). */
+/** Self-update: re-download the yt-dlp zipapp into userData/bin (never the signed bundle). */
 export async function updateEngine(): Promise<string> {
-  const ytdlp = ensureYtDlp()
-  const { stdout, stderr } = await execFileP(ytdlp, ['-U'], { timeout: 120_000, env: engineEnv() })
-  return (stdout || stderr).trim() || 'yt-dlp est à jour.'
+  const dest = join(userBinDir(), 'yt-dlp')
+  await downloadFile('https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp', dest)
+  if (process.platform !== 'win32') chmodSync(dest, 0o755)
+  const { cmd, args } = ytDlpArgs(['--version'])
+  const { stdout } = await execFileP(cmd, args, { timeout: 30_000, env: engineEnv() })
+  return `yt-dlp mis à jour (${stdout.trim()}).`
+}
+
+/** Minimal HTTPS download with redirect following. */
+function downloadFile(url: string, dest: string, redirects = 0): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (redirects > 10) return reject(new Error('Too many redirects'))
+    httpsGet(url, { headers: { 'User-Agent': 'dowtubes' } }, (res) => {
+      const code = res.statusCode ?? 0
+      if (code >= 300 && code < 400 && res.headers.location) {
+        res.resume()
+        return resolve(downloadFile(res.headers.location, dest, redirects + 1))
+      }
+      if (code !== 200) {
+        res.resume()
+        return reject(new Error(`HTTP ${code}`))
+      }
+      const ws = createWriteStream(dest)
+      res.pipe(ws)
+      ws.on('finish', () => ws.close(() => resolve()))
+      ws.on('error', reject)
+    }).on('error', reject)
+  })
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -226,6 +254,21 @@ function num(s: string | undefined): number | null {
   if (s == null || s === 'NA' || s === 'None' || s === '') return null
   const n = Number(s)
   return Number.isFinite(n) ? n : null
+}
+
+/** 'none' = stream truly absent; null = unknown (not probed); otherwise the codec name. */
+function normCodec(v: unknown): string | null {
+  if (v === 'none') return 'none'
+  if (v == null) return null
+  return String(v)
+}
+
+function resolutionLabel(f: Record<string, unknown>, height: number | null, isAudioOnly: boolean): string {
+  const res = f.resolution as string | undefined
+  if (res) return res
+  if (isAudioOnly) return 'audio only'
+  if (height) return `${(f.width as number) ?? '?'}x${height}`
+  return String(f.ext ?? '').toUpperCase() || '—'
 }
 
 function emptyEvent(id: string, phase: ProgressEvent['phase']): ProgressEvent {

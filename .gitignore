@@ -2,7 +2,8 @@ node_modules/
 out/
 dist/
 out-tsc/
-resources/bin/
+resources/engine/
+resources/python/
 *.log
 .DS_Store
 .env

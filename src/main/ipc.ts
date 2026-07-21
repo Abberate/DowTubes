@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { VersionInfo, DownloadRequest } from '../shared/types'
-import { ensureYtDlp, ffmpegPath, engineEnv } from './binaries'
+import { ytDlpArgs, ffmpegPath, engineEnv } from './binaries'
 import { probe, download, cancel, updateEngine } from './engine'
 
 const execFileP = promisify(execFile)
@@ -27,10 +27,10 @@ async function probeVersion(bin: string, args: string[]): Promise<string> {
 
 export function registerIpc(): void {
   ipcMain.handle('app:getVersions', async (): Promise<VersionInfo> => {
-    const ytdlp = ensureYtDlp()
+    const ytdlp = ytDlpArgs(['--version'])
     const ffmpeg = ffmpegPath()
     const [ytdlpVersion, ffmpegVersion] = await Promise.all([
-      probeVersion(ytdlp, ['--version']),
+      probeVersion(ytdlp.cmd, ytdlp.args),
       probeVersion(ffmpeg, ['-version'])
     ])
     return {
@@ -40,7 +40,7 @@ export function registerIpc(): void {
       chrome: process.versions.chrome,
       ytdlp: ytdlpVersion,
       ffmpeg: ffmpegVersion.replace(/^ffmpeg version /, ''),
-      ytdlpPath: ytdlp,
+      ytdlpPath: ytdlp.args[0],
       ffmpegPath: ffmpeg
     }
   })
