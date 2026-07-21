@@ -136,9 +136,9 @@ export default function App(): JSX.Element {
       progress: null,
       result: null
     }
+    // Keep the probe panel open so more options (other quality / audio / subs)
+    // of the same video can be added; it closes on X or a new analysis.
     setItems((prev) => [item, ...prev])
-    setProbe(null)
-    setUrl('')
   }
 
   function cancelItem(id: string): void {
@@ -167,6 +167,19 @@ export default function App(): JSX.Element {
     }
   }
 
+  // Escape closes the probe panel.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && probe) {
+        setProbe(null)
+        setUrl('')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [probe])
+
+  const activeCount = items.filter((i) => i.status === 'downloading' || i.status === 'postprocessing').length
   const finishedCount = items.filter((i) => ['done', 'error', 'canceled'].includes(i.status)).length
   const ytOk = versions ? !/indisponible|inconnu/i.test(versions.ytdlp) : false
 
@@ -193,6 +206,7 @@ export default function App(): JSX.Element {
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && doProbe()}
             spellCheck={false}
+            autoFocus
           />
         </div>
         <button className="btn-primary" onClick={doProbe} disabled={probing || !url.trim()}>
@@ -206,10 +220,23 @@ export default function App(): JSX.Element {
         </div>
       )}
 
-      {probe && <ProbePanel probe={probe} onDownload={addToQueue} onClose={() => setProbe(null)} />}
+      {probe && (
+        <ProbePanel
+          key={probe.webpageUrl}
+          probe={probe}
+          onDownload={addToQueue}
+          onClose={() => {
+            setProbe(null)
+            setUrl('')
+          }}
+        />
+      )}
 
       <div className="list-head">
-        <h2>Téléchargements {items.length > 0 && <span className="count">{items.length}</span>}</h2>
+        <h2>
+          Téléchargements {items.length > 0 && <span className="count">{items.length}</span>}
+          {activeCount > 0 && <span className="active-count">{activeCount} en cours</span>}
+        </h2>
         {finishedCount > 0 && (
           <button className="link-btn" onClick={clearFinished}>
             Effacer terminés

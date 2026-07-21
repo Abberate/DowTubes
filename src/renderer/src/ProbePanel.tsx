@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { ProbeResult } from '../../shared/types'
 import { qualityOptions, subtitleLangs, langLabel, fmtDuration, type QualityOption, type SubtitleChoice } from './lib'
-import { IconDownload, IconLock, IconVideo, IconMusic, IconX, IconCaptions } from './icons'
+import { IconDownload, IconLock, IconVideo, IconMusic, IconX, IconCaptions, IconCheck } from './icons'
 
 interface Props {
   probe: ProbeResult
@@ -19,6 +19,7 @@ export default function ProbePanel({ probe, onDownload, onClose }: Props): JSX.E
   const [subOn, setSubOn] = useState(false)
   const [subLang, setSubLang] = useState<string>(subs[0]?.code ?? '')
   const [subEmbed, setSubEmbed] = useState(false)
+  const [addedCount, setAddedCount] = useState(0)
 
   const chosen = options.find((o) => o.key === selected) ?? options[0]
   const isVideo = chosen?.kind === 'video'
@@ -31,6 +32,7 @@ export default function ProbePanel({ probe, onDownload, onClose }: Props): JSX.E
         ? { lang: subLang, auto: subs.find((s) => s.code === subLang)?.auto ?? false, embed: subEmbed }
         : null
     onDownload(chosen, subtitle)
+    setAddedCount((c) => c + 1)
   }
 
   return (
@@ -129,6 +131,13 @@ export default function ProbePanel({ probe, onDownload, onClose }: Props): JSX.E
             <IconDownload size={17} />
             Télécharger en {chosen?.label}
           </button>
+
+          {addedCount > 0 && (
+            <div className="probe-added">
+              <IconCheck size={14} /> {addedCount} option{addedCount > 1 ? 's' : ''} ajoutée
+              {addedCount > 1 ? 's' : ''} — choisis-en une autre ou ferme
+            </div>
+          )}
         </>
       )}
     </div>
