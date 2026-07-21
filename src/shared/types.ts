@@ -68,6 +68,8 @@ export interface DownloadRequest {
   outputDir: string
   /** Video id (from probe) used to target partial-file cleanup on cancel. */
   expectedId?: string
+  /** Optional subtitle to fetch (video downloads only). */
+  subtitle?: { lang: string; auto: boolean; embed: boolean }
 }
 
 export type DownloadErrorKind = 'drm' | 'network' | 'extractor' | 'canceled' | 'unknown'

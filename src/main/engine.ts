@@ -210,6 +210,12 @@ function buildArgs(req: DownloadRequest): string[] {
     if (req.mergeFormat) args.push('--merge-output-format', req.mergeFormat)
   }
 
+  if (req.subtitle && !req.audioOnly) {
+    const s = req.subtitle
+    args.push(s.auto ? '--write-auto-subs' : '--write-subs', '--sub-langs', s.lang, '--convert-subs', 'srt')
+    if (s.embed) args.push('--embed-subs')
+  }
+
   args.push(
     '--ffmpeg-location', ffmpegPath(),
     '-o', join(req.outputDir, '%(title)s [%(id)s].%(ext)s'),

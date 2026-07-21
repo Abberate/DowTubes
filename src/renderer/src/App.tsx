@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ProbeResult, VersionInfo, DownloadRequest, DownloadResult } from '../../shared/types'
-import type { QueueItem, ItemStatus, QualityOption } from './lib'
+import type { QueueItem, ItemStatus, QualityOption, SubtitleChoice } from './lib'
 import { errMsg } from './lib'
 import ProbePanel from './ProbePanel'
 import DownloadCard from './DownloadCard'
@@ -85,7 +85,8 @@ export default function App(): JSX.Element {
       audioFormat: item.audioFormat,
       mergeFormat: item.mergeFormat,
       outputDir: outputDirRef.current,
-      expectedId: item.expectedId
+      expectedId: item.expectedId,
+      subtitle: item.subtitle
     }
     let res: DownloadResult
     try {
@@ -117,7 +118,7 @@ export default function App(): JSX.Element {
     }
   }
 
-  function addToQueue(opt: QualityOption): void {
+  function addToQueue(opt: QualityOption, subtitle: SubtitleChoice | null): void {
     if (!probe) return
     const item: QueueItem = {
       id: crypto.randomUUID(),
@@ -130,6 +131,7 @@ export default function App(): JSX.Element {
       audioFormat: opt.audioFormat,
       mergeFormat: opt.mergeFormat,
       expectedId: probe.id,
+      subtitle: subtitle ?? undefined,
       status: 'queued',
       progress: null,
       result: null

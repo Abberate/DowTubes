@@ -1,6 +1,6 @@
 import type { QueueItem } from './lib'
-import { fmtSpeed, fmtEta } from './lib'
-import { IconVideo, IconMusic, IconCheck, IconAlert, IconExternal, IconRetry, IconTrash, IconX } from './icons'
+import { fmtSpeed, fmtEta, langLabel } from './lib'
+import { IconVideo, IconMusic, IconCheck, IconAlert, IconExternal, IconRetry, IconTrash, IconX, IconCaptions } from './icons'
 
 interface Props {
   item: QueueItem
@@ -33,6 +33,12 @@ export default function DownloadCard({ item, onCancel, onRetry, onRemove, onReve
             {item.audioOnly ? <IconMusic size={12} /> : <IconVideo size={12} />}
             {item.qualityLabel}
           </span>
+          {item.subtitle && (
+            <span className="chip sub" title={`Sous-titres · ${langLabel(item.subtitle.lang)}`}>
+              <IconCaptions size={12} />
+              {langLabel(item.subtitle.lang)}
+            </span>
+          )}
         </div>
 
         <div className="dl-status">

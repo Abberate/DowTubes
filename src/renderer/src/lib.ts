@@ -14,9 +14,21 @@ export interface QueueItem {
   audioFormat?: 'mp3' | 'm4a'
   mergeFormat?: 'mp4' | 'mkv'
   expectedId?: string
+  subtitle?: SubtitleChoice
   status: ItemStatus
   progress: ProgressEvent | null
   result: DownloadResult | null
+}
+
+export interface SubtitleChoice {
+  lang: string
+  auto: boolean
+  embed: boolean
+}
+
+export interface SubLang {
+  code: string
+  auto: boolean
 }
 
 /** A selectable quality in the probe panel. */
@@ -109,4 +121,29 @@ export function fmtDuration(s: number | null | undefined): string {
 export function errMsg(e: unknown): string {
   if (e && typeof e === 'object' && 'message' in e) return String((e as { message: unknown }).message)
   return String(e)
+}
+
+const LANG_NAMES: Record<string, string> = {
+  fr: 'Français', en: 'Anglais', es: 'Espagnol', de: 'Allemand', it: 'Italien',
+  pt: 'Portugais', ar: 'Arabe', zh: 'Chinois', ja: 'Japonais', ru: 'Russe',
+  nl: 'Néerlandais', ko: 'Coréen', hi: 'Hindi', tr: 'Turc', pl: 'Polonais'
+}
+const COMMON = ['fr', 'en', 'es', 'de', 'it', 'pt', 'ar']
+
+export function langLabel(code: string): string {
+  const base = code.split('-')[0]
+  return LANG_NAMES[base] ?? code
+}
+
+/** Available subtitle languages: human subs first, common languages prioritized, auto-captions last. */
+export function subtitleLangs(subs: string[], auto: string[]): SubLang[] {
+  const usable = (l: string): boolean => l !== 'live_chat'
+  const human = subs.filter(usable).map((code) => ({ code, auto: false }))
+  const humanCodes = new Set(human.map((h) => h.code))
+  const autoOnly = auto.filter((l) => usable(l) && !humanCodes.has(l)).map((code) => ({ code, auto: true }))
+  const rank = (s: SubLang): number => {
+    const i = COMMON.indexOf(s.code.split('-')[0])
+    return (s.auto ? 1000 : 0) + (i === -1 ? 500 : i)
+  }
+  return [...human, ...autoOnly].sort((a, b) => rank(a) - rank(b))
 }

@@ -311,6 +311,76 @@ body {
   margin-top: 4px;
 }
 
+/* Subtitles */
+.quality-label.no-margin {
+  margin-bottom: 0;
+}
+.sub-count {
+  color: var(--muted);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 4px;
+}
+.sub-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.sub-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.sub-controls {
+  display: flex;
+  gap: 10px;
+  margin-top: 11px;
+  flex-wrap: wrap;
+}
+.sub-select {
+  flex: 1;
+  min-width: 150px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 11px;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+}
+.sub-select:focus {
+  border-color: var(--accent-border);
+}
+.segmented {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+}
+.segmented button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 12.5px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+.segmented button.on {
+  background: var(--accent);
+  color: #fff;
+}
+.chip.sub {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+}
+
 .drm-banner {
   display: flex;
   align-items: center;
