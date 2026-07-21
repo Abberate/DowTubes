@@ -1,0 +1,8 @@
+node_modules/
+out/
+dist/
+out-tsc/
+resources/bin/
+*.log
+.DS_Store
+.env

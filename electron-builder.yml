@@ -1,0 +1,26 @@
+# Packaging config — used in Phase 6 (macOS DMG + Windows NSIS via CI).
+# Present now as a placeholder so binary-bundling intent is documented from Phase 0.
+appId: com.dowtubes.app
+productName: DowTubes
+directories:
+  buildResources: build
+files:
+  - out/**
+  - package.json
+# yt-dlp/ffmpeg must exist as real files on disk (asar can't exec) -> unpack them.
+asarUnpack:
+  - resources/bin/**
+  - "**/node_modules/ffmpeg-static/**"
+  - "**/node_modules/ffprobe-static/**"
+# Seed the read-only yt-dlp binary; the app copies it to userData/bin on first run
+# and self-updates THERE, never inside the signed bundle.
+extraResources:
+  - from: resources/bin
+    to: bin
+    filter: ["**/*"]
+mac:
+  target: dmg
+  category: public.app-category.utilities
+  # Unsigned for now (internal sharing). Phase 6 adds Developer ID + notarization.
+win:
+  target: nsis
