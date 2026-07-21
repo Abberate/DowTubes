@@ -1,7 +1,8 @@
 import { app } from 'electron'
 import { existsSync, mkdirSync, copyFileSync, chmodSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, dirname } from 'node:path'
 import ffmpegStatic from 'ffmpeg-static'
+import ffprobeStatic from 'ffprobe-static'
 
 const isWin = process.platform === 'win32'
 const ytdlpName = isWin ? 'yt-dlp.exe' : 'yt-dlp'
@@ -34,8 +35,31 @@ export function ensureYtDlp(): string {
   return userCopy
 }
 
-/** Absolute path to the bundled ffmpeg. Normalizes the asar.unpacked path when packaged. */
-export function ffmpegPath(): string {
-  const p = (ffmpegStatic as unknown as string) ?? ''
+/** Normalize a node_modules binary path so it resolves inside app.asar.unpacked when packaged. */
+function normalize(p: string): string {
   return app.isPackaged ? p.replace('app.asar', 'app.asar.unpacked') : p
+}
+
+/** Absolute path to the bundled ffmpeg binary. */
+export function ffmpegPath(): string {
+  return normalize((ffmpegStatic as unknown as string) ?? '')
+}
+
+/** Absolute path to the bundled ffprobe binary. */
+export function ffprobePath(): string {
+  return normalize(ffprobeStatic.path ?? '')
+}
+
+/**
+ * PATH-augmented env so yt-dlp finds BOTH ffmpeg and ffprobe (they live in separate
+ * node_modules dirs). yt-dlp resolves ffprobe from --ffmpeg-location's dir then PATH.
+ */
+export function engineEnv(): NodeJS.ProcessEnv {
+  const extra = [dirname(ffmpegPath()), dirname(ffprobePath())].filter(Boolean)
+  const path = [...extra, process.env.PATH ?? ''].join(pathDelimiter())
+  return { ...process.env, PATH: path }
+}
+
+function pathDelimiter(): string {
+  return process.platform === 'win32' ? ';' : ':'
 }

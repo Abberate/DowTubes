@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { VersionInfo } from '../../shared/types'
+import Downloader from './Downloader'
 
 type Status = 'loading' | 'ok' | 'error'
 
@@ -73,8 +74,10 @@ export default function App(): JSX.Element {
         </div>
       </section>
 
+      <Downloader />
+
       <footer className="foot">
-        Phase 0 — la chaîne Electron → IPC sécurisé → binaires est opérationnelle. ✅
+        Phase 1 — moteur yt-dlp : sonde, formats, téléchargement, progression, refus DRM. ✅
       </footer>
     </div>
   )
