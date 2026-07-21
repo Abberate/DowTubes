@@ -111,8 +111,14 @@ export default function App(): JSX.Element {
         i.id === item.id
           ? {
               ...i,
-              status: res.ok ? 'done' : res.errorKind === 'canceled' ? 'canceled' : 'error',
-              result: res,
+              status: res.ok
+                ? 'done'
+                : res.errorKind === 'canceled'
+                  ? 'canceled'
+                  : res.errorKind === 'paused'
+                    ? 'paused'
+                    : 'error',
+              result: res.errorKind === 'paused' ? null : res,
               progress: null
             }
           : i
@@ -200,8 +206,19 @@ export default function App(): JSX.Element {
     setItems((prev) => [item, ...prev])
   }
 
-  function cancelItem(id: string): void {
-    window.api.cancel(id)
+  function pauseItem(id: string): void {
+    window.api.pause(id)
+  }
+  function resumeItem(id: string): void {
+    // Re-queue; the scheduler restarts it and yt-dlp continues the .part file.
+    startedRef.current.delete(id)
+    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'queued', progress: null, result: null } : i)))
+  }
+  function pauseAll(): void {
+    itemsRef.current.filter((i) => i.status === 'downloading').forEach((i) => window.api.pause(i.id))
+  }
+  function resumeAll(): void {
+    itemsRef.current.filter((i) => i.status === 'paused').forEach((i) => resumeItem(i.id))
   }
   function removeItem(id: string): void {
     const it = itemsRef.current.find((i) => i.id === id)
@@ -239,6 +256,8 @@ export default function App(): JSX.Element {
   }
 
   const activeCount = items.filter((i) => i.status === 'downloading' || i.status === 'postprocessing').length
+  const downloadingCount = items.filter((i) => i.status === 'downloading').length
+  const pausedCount = items.filter((i) => i.status === 'paused').length
   const finishedCount = items.filter((i) => TERMINAL.includes(i.status)).length
   const ytOk = versions ? !/indisponible|inconnu/i.test(versions.ytdlp) : false
 
@@ -299,11 +318,23 @@ export default function App(): JSX.Element {
           Téléchargements {items.length > 0 && <span className="count">{items.length}</span>}
           {activeCount > 0 && <span className="active-count">{activeCount} en cours</span>}
         </h2>
-        {finishedCount > 0 && (
-          <button className="link-btn" onClick={clearFinished}>
-            Effacer terminés
-          </button>
-        )}
+        <div className="list-actions">
+          {downloadingCount > 1 && (
+            <button className="link-btn" onClick={pauseAll}>
+              Tout mettre en pause
+            </button>
+          )}
+          {pausedCount > 1 && (
+            <button className="link-btn" onClick={resumeAll}>
+              Tout reprendre
+            </button>
+          )}
+          {finishedCount > 0 && (
+            <button className="link-btn" onClick={clearFinished}>
+              Effacer terminés
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="list">
@@ -318,7 +349,8 @@ export default function App(): JSX.Element {
             <DownloadCard
               key={it.id}
               item={it}
-              onCancel={cancelItem}
+              onPause={pauseItem}
+              onResume={resumeItem}
               onRetry={retryItem}
               onRemove={removeItem}
               onReveal={(p) => window.api.reveal(p)}

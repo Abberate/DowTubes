@@ -42,7 +42,7 @@ export interface ProbeResult {
   autoCaptionLangs: string[]
 }
 
-export type DownloadPhase = 'downloading' | 'postprocessing' | 'done' | 'error' | 'canceled'
+export type DownloadPhase = 'downloading' | 'postprocessing' | 'done' | 'error' | 'canceled' | 'paused'
 
 /** Streamed to the renderer as a download progresses. */
 export interface ProgressEvent {
@@ -74,7 +74,7 @@ export interface DownloadRequest {
   subtitle?: { lang: string; auto: boolean; embed: boolean }
 }
 
-export type DownloadErrorKind = 'drm' | 'network' | 'extractor' | 'canceled' | 'unknown'
+export type DownloadErrorKind = 'drm' | 'network' | 'extractor' | 'canceled' | 'paused' | 'unknown'
 
 /** Final outcome of a download, resolved when the yt-dlp process exits. */
 export interface DownloadResult {

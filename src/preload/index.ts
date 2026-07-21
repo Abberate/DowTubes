@@ -15,6 +15,7 @@ const api = {
   probe: (url: string): Promise<ProbeResult> => ipcRenderer.invoke('engine:probe', url),
   download: (req: DownloadRequest): Promise<DownloadResult> => ipcRenderer.invoke('engine:download', req),
   cancel: (id: string): Promise<boolean> => ipcRenderer.invoke('engine:cancel', id),
+  pause: (id: string): Promise<boolean> => ipcRenderer.invoke('engine:pause', id),
   updateEngine: (): Promise<string> => ipcRenderer.invoke('engine:update'),
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFolder'),
   reveal: (path: string): Promise<void> => ipcRenderer.invoke('shell:reveal', path),

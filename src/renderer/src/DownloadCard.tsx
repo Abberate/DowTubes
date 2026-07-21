@@ -8,16 +8,17 @@ import {
   IconAlert,
   IconFolder,
   IconPlay,
+  IconPause,
   IconRetry,
   IconTrash,
-  IconX,
   IconCaptions,
   IconRefresh
 } from './icons'
 
 interface Props {
   item: QueueItem
-  onCancel: (id: string) => void
+  onPause: (id: string) => void
+  onResume: (id: string) => void
   onRetry: (id: string) => void
   onRemove: (id: string) => void
   onReveal: (path: string) => void
@@ -25,11 +26,21 @@ interface Props {
   onUpdateAndRetry: (id: string) => void
 }
 
-export default function DownloadCard({ item, onCancel, onRetry, onRemove, onReveal, onOpen, onUpdateAndRetry }: Props): JSX.Element {
+export default function DownloadCard({
+  item,
+  onPause,
+  onResume,
+  onRetry,
+  onRemove,
+  onReveal,
+  onOpen,
+  onUpdateAndRetry
+}: Props): JSX.Element {
   const [imgFailed, setImgFailed] = useState(false)
   const active = item.status === 'downloading' || item.status === 'postprocessing'
   const pct = item.progress?.percent ?? null
   const done = item.status === 'done' && !!item.result?.filepath
+  const canRetry = (item.status === 'error' && item.result?.errorKind !== 'drm') || item.status === 'canceled'
   const showThumb = item.thumbnail && !imgFailed
 
   return (
@@ -78,9 +89,14 @@ export default function DownloadCard({ item, onCancel, onRetry, onRemove, onReve
       </div>
 
       <div className="dl-actions">
-        {active && (
-          <button className="icon-btn danger" title="Annuler" aria-label="Annuler" onClick={() => onCancel(item.id)}>
-            <IconX size={16} />
+        {item.status === 'downloading' && (
+          <button className="icon-btn" title="Pause" aria-label="Mettre en pause" onClick={() => onPause(item.id)}>
+            <IconPause size={16} />
+          </button>
+        )}
+        {item.status === 'paused' && (
+          <button className="icon-btn" title="Reprendre" aria-label="Reprendre" onClick={() => onResume(item.id)}>
+            <IconPlay size={16} />
           </button>
         )}
         {done && (
@@ -93,16 +109,14 @@ export default function DownloadCard({ item, onCancel, onRetry, onRemove, onReve
             </button>
           </>
         )}
-        {(item.status === 'error' && item.result?.errorKind !== 'drm') || item.status === 'canceled' ? (
+        {canRetry && (
           <button className="icon-btn" title="Relancer" aria-label="Relancer" onClick={() => onRetry(item.id)}>
             <IconRetry size={16} />
           </button>
-        ) : null}
-        {!active && (
-          <button className="icon-btn" title="Retirer" aria-label="Retirer" onClick={() => onRemove(item.id)}>
-            <IconTrash size={16} />
-          </button>
         )}
+        <button className="icon-btn danger" title="Retirer" aria-label="Retirer" onClick={() => onRemove(item.id)}>
+          <IconTrash size={16} />
+        </button>
       </div>
     </div>
   )
@@ -112,6 +126,8 @@ function StatusLine({ item, onUpdateAndRetry }: { item: QueueItem; onUpdateAndRe
   switch (item.status) {
     case 'queued':
       return <span className="muted">En attente…</span>
+    case 'paused':
+      return <span className="muted">En pause</span>
     case 'downloading': {
       const p = item.progress
       const parts = [

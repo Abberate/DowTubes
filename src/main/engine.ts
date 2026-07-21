@@ -17,9 +17,10 @@ import { ytDlpArgs, ffmpegPath, engineEnv, userBinDir } from './binaries'
 
 const execFileP = promisify(execFile)
 
-/** Live downloads by job id, so they can be cancelled. */
+/** Live downloads by job id, so they can be cancelled/paused. */
 const running = new Map<string, ChildProcess>()
 const canceled = new Set<string>()
+const paused = new Set<string>()
 
 // ── Probe ───────────────────────────────────────────────────────────────────
 
@@ -137,6 +138,12 @@ export function download(
       rl.close()
       running.delete(req.id)
 
+      if (paused.has(req.id)) {
+        // Keep the .part files so a resume (re-queue) continues where it stopped.
+        paused.delete(req.id)
+        onProgress(emptyEvent(req.id, 'paused'))
+        return resolve({ id: req.id, ok: false, filepath: null, error: 'En pause', errorKind: 'paused' })
+      }
       if (canceled.has(req.id)) {
         canceled.delete(req.id)
         cleanupPartials(req.outputDir, req.expectedId)
@@ -153,6 +160,15 @@ export function download(
       resolve({ id: req.id, ok: false, filepath: finalPath, error: humanError(stderr), errorKind: kind })
     })
   })
+}
+
+/** Pause a running download: stop the process but KEEP partial files so it can resume. */
+export function pause(id: string): boolean {
+  const child = running.get(id)
+  if (!child) return false
+  paused.add(id)
+  child.kill('SIGTERM')
+  return true
 }
 
 /** Cancel a running download: terminate the process; partials are cleaned on close. */

@@ -1,6 +1,6 @@
 import type { ProbeResult, ProgressEvent, DownloadResult, FormatInfo } from '../../shared/types'
 
-export type ItemStatus = 'queued' | 'downloading' | 'postprocessing' | 'done' | 'error' | 'canceled'
+export type ItemStatus = 'queued' | 'downloading' | 'postprocessing' | 'done' | 'error' | 'canceled' | 'paused'
 
 /** One row in the download list. */
 export interface QueueItem {

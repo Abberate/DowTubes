@@ -742,3 +742,36 @@ input:focus-visible,
 .update-inline {
   margin-left: 8px;
 }
+
+/* ── Micro-polish ──────────────────────────────────── */
+.list-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.dl-card {
+  animation: cardIn 0.22s ease;
+}
+.dl-card.paused {
+  opacity: 0.72;
+}
+.dl-card.paused .dl-bar {
+  display: none;
+}
+/* Drag the window by the header (macOS) */
+.app-header {
+  -webkit-app-region: drag;
+}
+.app-header button {
+  -webkit-app-region: no-drag;
+}

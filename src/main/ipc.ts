@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { VersionInfo, DownloadRequest } from '../shared/types'
 import { ytDlpArgs, ffmpegPath, engineEnv } from './binaries'
-import { probe, download, cancel, updateEngine } from './engine'
+import { probe, download, cancel, pause, updateEngine } from './engine'
 import { loadQueue, saveQueue } from './store'
 
 const execFileP = promisify(execFile)
@@ -57,6 +57,8 @@ export function registerIpc(): void {
   )
 
   ipcMain.handle('engine:cancel', (_e, id: string) => cancel(id))
+
+  ipcMain.handle('engine:pause', (_e, id: string) => pause(id))
 
   ipcMain.handle('engine:update', () => updateEngine())
 
