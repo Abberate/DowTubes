@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 
 // Persist the download list as JSON in userData. A native SQLite module would
@@ -23,7 +23,10 @@ export function saveQueue(items: unknown[]): void {
   try {
     const f = queueFile()
     mkdirSync(dirname(f), { recursive: true })
-    writeFileSync(f, JSON.stringify(items))
+    // Atomic write: a crash mid-write must not corrupt/wipe the saved list.
+    const tmp = `${f}.tmp`
+    writeFileSync(tmp, JSON.stringify(items))
+    renameSync(tmp, f)
   } catch {
     /* best-effort */
   }

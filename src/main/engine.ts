@@ -1,3 +1,4 @@
+import { Notification, shell } from 'electron'
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createInterface } from 'node:readline'
@@ -144,6 +145,7 @@ export function download(
       }
       if (code === 0) {
         onProgress({ ...emptyEvent(req.id, 'done'), percent: 100 })
+        notifyDone(req.title, finalPath)
         return resolve({ id: req.id, ok: true, filepath: finalPath, error: null })
       }
       const kind = classifyError(stderr)
@@ -164,6 +166,28 @@ export function cancel(id: string): boolean {
     if (running.has(id)) running.get(id)!.kill('SIGKILL')
   }, 4000)
   return true
+}
+
+/** Terminate all in-flight downloads (called on app quit so children aren't orphaned). */
+export function killAll(): void {
+  for (const child of running.values()) {
+    try {
+      child.kill('SIGTERM')
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function notifyDone(title: string | undefined, filepath: string | null): void {
+  try {
+    if (!Notification.isSupported()) return
+    const n = new Notification({ title: 'Téléchargement terminé', body: title ?? 'Fichier prêt' })
+    if (filepath) n.on('click', () => shell.showItemInFolder(filepath))
+    n.show()
+  } catch {
+    /* notifications are best-effort */
+  }
 }
 
 /** Self-update: re-download the yt-dlp zipapp into userData/bin (never the signed bundle). */
@@ -216,9 +240,14 @@ function buildArgs(req: DownloadRequest): string[] {
     if (s.embed) args.push('--embed-subs')
   }
 
+  // Metadata is safe (ffmpeg). Cover art only for MP3 (ffmpeg handles it; m4a/mp4
+  // would need AtomicParsley/mutagen we don't bundle yet).
+  args.push('--embed-metadata')
+  if (req.audioOnly && (req.audioFormat ?? 'mp3') === 'mp3') args.push('--embed-thumbnail')
+
   args.push(
     '--ffmpeg-location', ffmpegPath(),
-    '-o', join(req.outputDir, '%(title)s [%(id)s].%(ext)s'),
+    '-o', join(req.outputDir, '%(title)s.%(ext)s'),
     // %(progress)j (whole-dict JSON) emits nothing in current yt-dlp — use explicit fields.
     '--progress-template',
     'download:[dl]|%(progress.status)s|%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s|%(progress.fragment_index)s|%(progress.fragment_count)s',

@@ -172,6 +172,19 @@ export const IconClose = ({ size, className }: P): JSX.Element =>
     className
   )
 
+export const IconClipboard = ({ size, className }: P): JSX.Element =>
+  svg(
+    <>
+      <rect x="8" y="2" width="8" height="4" rx="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    </>,
+    size,
+    className
+  )
+
+export const IconPlay = ({ size, className }: P): JSX.Element =>
+  svg(<path d="M7 4.5v15l12-7.5z" />, size, className)
+
 export const IconCaptions = ({ size, className }: P): JSX.Element =>
   svg(
     <>

@@ -1,6 +1,16 @@
 import { useMemo, useState } from 'react'
 import type { ProbeResult } from '../../shared/types'
-import { qualityOptions, subtitleLangs, langLabel, fmtDuration, type QualityOption, type SubtitleChoice } from './lib'
+import {
+  qualityOptions,
+  subtitleLangs,
+  langLabel,
+  fmtDuration,
+  fmtBytes,
+  type QualityOption,
+  type SubtitleChoice
+} from './lib'
+
+const LAST_QUALITY_KEY = 'dowtubes.lastQuality'
 import { IconDownload, IconLock, IconVideo, IconMusic, IconX, IconCaptions, IconCheck } from './icons'
 
 interface Props {
@@ -15,7 +25,12 @@ export default function ProbePanel({ probe, onDownload, onClose }: Props): JSX.E
   const audio = options.filter((o) => o.kind === 'audio')
   const subs = useMemo(() => subtitleLangs(probe.subtitleLangs, probe.autoCaptionLangs), [probe])
 
-  const [selected, setSelected] = useState<string>(video[0]?.key ?? audio[0]?.key ?? '')
+  const [selected, setSelected] = useState<string>(() => {
+    // Remember the last-used quality across videos (matched by label).
+    const last = localStorage.getItem(LAST_QUALITY_KEY)
+    const match = last && options.find((o) => o.label === last)
+    return (match || video[0] || audio[0])?.key ?? ''
+  })
   const [subOn, setSubOn] = useState(false)
   const [subLang, setSubLang] = useState<string>(subs[0]?.code ?? '')
   const [subEmbed, setSubEmbed] = useState(false)
@@ -32,6 +47,7 @@ export default function ProbePanel({ probe, onDownload, onClose }: Props): JSX.E
         ? { lang: subLang, auto: subs.find((s) => s.code === subLang)?.auto ?? false, embed: subEmbed }
         : null
     onDownload(chosen, subtitle)
+    localStorage.setItem(LAST_QUALITY_KEY, chosen.label)
     setAddedCount((c) => c + 1)
   }
 
@@ -72,7 +88,10 @@ export default function ProbePanel({ probe, onDownload, onClose }: Props): JSX.E
                   onClick={() => setSelected(o.key)}
                 >
                   <span className="q-label">{o.label}</span>
-                  <span className="q-sub">{o.sub}</span>
+                  <span className="q-sub">
+                    {o.sub}
+                    {o.size ? ` · ~${fmtBytes(o.size)}` : ''}
+                  </span>
                 </button>
               ))}
             </div>
@@ -90,7 +109,10 @@ export default function ProbePanel({ probe, onDownload, onClose }: Props): JSX.E
                   onClick={() => setSelected(o.key)}
                 >
                   <span className="q-label">{o.label}</span>
-                  <span className="q-sub">{o.sub}</span>
+                  <span className="q-sub">
+                    {o.sub}
+                    {o.size ? ` · ~${fmtBytes(o.size)}` : ''}
+                  </span>
                 </button>
               ))}
             </div>

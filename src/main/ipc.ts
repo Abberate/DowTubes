@@ -70,6 +70,8 @@ export function registerIpc(): void {
 
   ipcMain.handle('shell:reveal', (_e, p: string) => shell.showItemInFolder(p))
 
+  ipcMain.handle('shell:openPath', (_e, p: string) => shell.openPath(p))
+
   ipcMain.handle('queue:load', () => loadQueue())
   ipcMain.handle('queue:save', (_e, items: unknown[]) => saveQueue(items))
 }

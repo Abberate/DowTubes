@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import type { ProbeResult, VersionInfo, DownloadRequest, DownloadResult } from '../../shared/types'
 import type { QueueItem, ItemStatus, QualityOption, SubtitleChoice } from './lib'
 import { errMsg } from './lib'
 import ProbePanel from './ProbePanel'
 import DownloadCard from './DownloadCard'
-import { IconDownload, IconSearch, IconFolder, IconInbox, IconRefresh, IconAlert } from './icons'
+import { IconDownload, IconSearch, IconFolder, IconInbox, IconRefresh, IconAlert, IconClipboard } from './icons'
 
 const MAX_CONCURRENT = 3
+const TERMINAL: ItemStatus[] = ['done', 'error', 'canceled']
 
 export default function App(): JSX.Element {
   const [url, setUrl] = useState('')
@@ -17,11 +18,13 @@ export default function App(): JSX.Element {
   const [outputDir, setOutputDir] = useState('')
   const [versions, setVersions] = useState<VersionInfo | null>(null)
   const [updating, setUpdating] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
 
   const itemsRef = useRef<QueueItem[]>([])
   const startedRef = useRef<Set<string>>(new Set())
   const outputDirRef = useRef('')
   const loadedRef = useRef(false)
+  const probeTokenRef = useRef(0)
 
   // ── init ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -31,8 +34,6 @@ export default function App(): JSX.Element {
     })
     window.api.getVersions().then(setVersions)
     window.api.loadQueue().then((saved) => {
-      // Restore the list; interrupted (non-terminal) items become 'queued' so the
-      // scheduler auto-resumes them (yt-dlp continues partial .part files).
       const restored = (saved as QueueItem[]).map((i) =>
         i.status === 'downloading' || i.status === 'postprocessing' || i.status === 'queued'
           ? { ...i, status: 'queued' as ItemStatus, progress: null }
@@ -41,13 +42,13 @@ export default function App(): JSX.Element {
       setItems(restored)
       loadedRef.current = true
     })
+    // Live progress only drives active items; terminal state is set by runDownload.
     const off = window.api.onProgress((ev) => {
+      if (ev.phase !== 'downloading' && ev.phase !== 'postprocessing') return
       setItems((prev) =>
-        prev.map((i) => {
-          if (i.id !== ev.id || i.status === 'done' || i.status === 'error' || i.status === 'canceled') return i
-          const status: ItemStatus = ev.phase === 'postprocessing' ? 'postprocessing' : 'downloading'
-          return { ...i, progress: ev, status }
-        })
+        prev.map((i) =>
+          i.id === ev.id && !TERMINAL.includes(i.status) ? { ...i, progress: ev, status: ev.phase } : i
+        )
       )
     })
     return off
@@ -66,7 +67,7 @@ export default function App(): JSX.Element {
     toStart.forEach(runDownload)
   }, [items])
 
-  // ── persistence: save on status/result changes (not on every progress tick) ──
+  // ── persistence (save on status/result changes, guarded) ─────────────────
   const saveSig = items.map((i) => `${i.id}:${i.status}:${i.result?.filepath ?? ''}`).join('|')
   useEffect(() => {
     if (!loadedRef.current) return
@@ -76,10 +77,20 @@ export default function App(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saveSig])
 
+  // Escape closes the probe panel.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && probe) closeProbe()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [probe])
+
   async function runDownload(item: QueueItem): Promise<void> {
     const req: DownloadRequest = {
       id: item.id,
       url: item.url,
+      title: item.title,
       format: item.format,
       audioOnly: item.audioOnly,
       audioFormat: item.audioFormat,
@@ -94,32 +105,82 @@ export default function App(): JSX.Element {
     } catch (e) {
       res = { id: item.id, ok: false, filepath: null, error: errMsg(e), errorKind: 'unknown' }
     }
+    startedRef.current.delete(item.id)
     setItems((prev) =>
       prev.map((i) =>
         i.id === item.id
-          ? { ...i, status: res.ok ? 'done' : res.errorKind === 'canceled' ? 'canceled' : 'error', result: res }
+          ? {
+              ...i,
+              status: res.ok ? 'done' : res.errorKind === 'canceled' ? 'canceled' : 'error',
+              result: res,
+              progress: null
+            }
           : i
       )
     )
   }
 
-  // ── actions ──────────────────────────────────────────────────────────────
-  async function doProbe(): Promise<void> {
-    if (!url.trim()) return
+  // ── entry ────────────────────────────────────────────────────────────────
+  async function doProbe(value?: string): Promise<void> {
+    const target = (value ?? url).trim()
+    if (!target) return
+    const token = ++probeTokenRef.current
     setProbing(true)
     setProbeErr('')
     setProbe(null)
     try {
-      setProbe(await window.api.probe(url.trim()))
+      const r = await window.api.probe(target)
+      if (token === probeTokenRef.current) setProbe(r)
     } catch (e) {
-      setProbeErr(errMsg(e))
+      if (token === probeTokenRef.current) setProbeErr(errMsg(e))
     } finally {
-      setProbing(false)
+      if (token === probeTokenRef.current) setProbing(false)
     }
   }
 
+  async function pasteAndProbe(): Promise<void> {
+    try {
+      const text = (await navigator.clipboard.readText()).trim()
+      if (/^https?:\/\//i.test(text)) {
+        setUrl(text)
+        doProbe(text)
+      } else if (text) {
+        setUrl(text)
+      }
+    } catch {
+      /* clipboard permission denied — ignore */
+    }
+  }
+
+  function onDrop(e: React.DragEvent): void {
+    e.preventDefault()
+    setDragOver(false)
+    const raw = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain')
+    const link = raw
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => /^https?:\/\//i.test(l))
+    if (link) {
+      setUrl(link)
+      doProbe(link)
+    }
+  }
+
+  function closeProbe(): void {
+    setProbe(null)
+    setUrl('')
+  }
+
+  // ── queue actions ─────────────────────────────────────────────────────────
   function addToQueue(opt: QualityOption, subtitle: SubtitleChoice | null): void {
     if (!probe) return
+    const sig = `${probe.webpageUrl}|${opt.format}|${opt.audioFormat ?? ''}|${subtitle?.lang ?? ''}|${subtitle?.embed ?? ''}`
+    const dupe = itemsRef.current.some(
+      (i) =>
+        !TERMINAL.includes(i.status) &&
+        `${i.url}|${i.format}|${i.audioFormat ?? ''}|${i.subtitle?.lang ?? ''}|${i.subtitle?.embed ?? ''}` === sig
+    )
+    if (dupe) return
     const item: QueueItem = {
       id: crypto.randomUUID(),
       url: probe.webpageUrl,
@@ -136,8 +197,6 @@ export default function App(): JSX.Element {
       progress: null,
       result: null
     }
-    // Keep the probe panel open so more options (other quality / audio / subs)
-    // of the same video can be added; it closes on X or a new analysis.
     setItems((prev) => [item, ...prev])
   }
 
@@ -155,7 +214,8 @@ export default function App(): JSX.Element {
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'queued', progress: null, result: null } : i)))
   }
   function clearFinished(): void {
-    setItems((prev) => prev.filter((i) => !['done', 'error', 'canceled'].includes(i.status)))
+    itemsRef.current.filter((i) => TERMINAL.includes(i.status)).forEach((i) => startedRef.current.delete(i.id))
+    setItems((prev) => prev.filter((i) => !TERMINAL.includes(i.status)))
   }
   async function updateEngine(): Promise<void> {
     setUpdating(true)
@@ -166,25 +226,34 @@ export default function App(): JSX.Element {
       setUpdating(false)
     }
   }
-
-  // Escape closes the probe panel.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && probe) {
-        setProbe(null)
-        setUrl('')
-      }
+  async function updateAndRetry(id: string): Promise<void> {
+    await updateEngine()
+    retryItem(id)
+  }
+  async function changeFolder(): Promise<void> {
+    const d = await window.api.pickFolder()
+    if (d) {
+      setOutputDir(d)
+      outputDirRef.current = d
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [probe])
+  }
 
   const activeCount = items.filter((i) => i.status === 'downloading' || i.status === 'postprocessing').length
-  const finishedCount = items.filter((i) => ['done', 'error', 'canceled'].includes(i.status)).length
+  const finishedCount = items.filter((i) => TERMINAL.includes(i.status)).length
   const ytOk = versions ? !/indisponible|inconnu/i.test(versions.ytdlp) : false
 
   return (
-    <div className="app">
+    <div
+      className={`app ${dragOver ? 'drag-over' : ''}`}
+      onDragOver={(e) => {
+        e.preventDefault()
+        setDragOver(true)
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target) setDragOver(false)
+      }}
+      onDrop={onDrop}
+    >
       <header className="app-header">
         <div className="brand">
           <div className="brand-logo">
@@ -208,8 +277,11 @@ export default function App(): JSX.Element {
             spellCheck={false}
             autoFocus
           />
+          <button className="icon-btn add-paste" title="Coller le lien" aria-label="Coller le lien" onClick={pasteAndProbe}>
+            <IconClipboard size={16} />
+          </button>
         </div>
-        <button className="btn-primary" onClick={doProbe} disabled={probing || !url.trim()}>
+        <button className="btn-primary" onClick={() => doProbe()} disabled={probing || !url.trim()}>
           {probing ? 'Analyse…' : 'Analyser'}
         </button>
       </div>
@@ -220,17 +292,7 @@ export default function App(): JSX.Element {
         </div>
       )}
 
-      {probe && (
-        <ProbePanel
-          key={probe.webpageUrl}
-          probe={probe}
-          onDownload={addToQueue}
-          onClose={() => {
-            setProbe(null)
-            setUrl('')
-          }}
-        />
-      )}
+      {probe && <ProbePanel key={probe.webpageUrl} probe={probe} onDownload={addToQueue} onClose={closeProbe} />}
 
       <div className="list-head">
         <h2>
@@ -249,7 +311,7 @@ export default function App(): JSX.Element {
           <div className="empty">
             <IconInbox size={40} />
             <p>Aucun téléchargement</p>
-            <span>Colle un lien ci-dessus pour commencer.</span>
+            <span>Colle ou dépose un lien ci-dessus pour commencer.</span>
           </div>
         ) : (
           items.map((it) => (
@@ -260,18 +322,25 @@ export default function App(): JSX.Element {
               onRetry={retryItem}
               onRemove={removeItem}
               onReveal={(p) => window.api.reveal(p)}
+              onOpen={(p) => window.api.openPath(p)}
+              onUpdateAndRetry={updateAndRetry}
             />
           ))
         )}
       </div>
 
       <footer className="status-bar">
-        <button className="folder-pill" onClick={async () => {
-          const d = await window.api.pickFolder()
-          if (d) { setOutputDir(d); outputDirRef.current = d }
-        }} title={outputDir}>
+        <button
+          className="folder-pill"
+          onClick={() => window.api.openPath(outputDir)}
+          aria-label={`Ouvrir le dossier de sortie : ${outputDir}`}
+          title={outputDir}
+        >
           <IconFolder size={14} />
           <span>{outputDir.split('/').pop() || 'Dossier'}</span>
+        </button>
+        <button className="link-btn" onClick={changeFolder}>
+          Changer
         </button>
 
         <div className="status-spacer" />

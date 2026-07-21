@@ -1,11 +1,14 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 import { registerIpc } from './ipc'
+import { killAll } from './engine'
 
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 920,
     height: 820,
+    minWidth: 480,
+    minHeight: 560,
     show: false,
     title: 'DowTubes',
     backgroundColor: '#14161c',
@@ -44,3 +47,6 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
+
+// Don't leave yt-dlp/ffmpeg children running after the app quits.
+app.on('before-quit', killAll)

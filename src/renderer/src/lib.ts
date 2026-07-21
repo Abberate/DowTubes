@@ -1,4 +1,4 @@
-import type { ProbeResult, ProgressEvent, DownloadResult } from '../../shared/types'
+import type { ProbeResult, ProgressEvent, DownloadResult, FormatInfo } from '../../shared/types'
 
 export type ItemStatus = 'queued' | 'downloading' | 'postprocessing' | 'done' | 'error' | 'canceled'
 
@@ -41,11 +41,15 @@ export interface QualityOption {
   audioOnly: boolean
   audioFormat?: 'mp3' | 'm4a'
   mergeFormat?: 'mp4' | 'mkv'
+  /** Estimated file size in bytes, when the probe provides it. */
+  size?: number
 }
 
-/** Derive well-classified quality choices from a probe (4K/1440/1080/720/480 when available + audio). */
+/** Derive well-classified quality choices from a probe (8K…480p when available + audio), with size estimates. */
 export function qualityOptions(probe: ProbeResult): QualityOption[] {
-  const maxH = probe.formats.reduce((m, f) => Math.max(m, f.height ?? 0), 0)
+  const fmts = probe.formats
+  const maxH = fmts.reduce((m, f) => Math.max(m, f.height ?? 0), 0)
+  const bestAudio = fmts.filter((f) => f.isAudioOnly).reduce((m, f) => Math.max(m, f.filesize ?? 0), 0) || undefined
   const tiers = [
     { label: '8K', sub: '4320p', h: 4320 },
     { label: '4K', sub: '2160p', h: 2160 },
@@ -65,7 +69,8 @@ export function qualityOptions(probe: ProbeResult): QualityOption[] {
           kind: 'video',
           format: `bv*[height<=${t.h}]+ba/b`,
           audioOnly: false,
-          mergeFormat: 'mp4'
+          mergeFormat: 'mp4',
+          size: videoSizeAt(fmts, t.h, bestAudio)
         })
       }
     }
@@ -80,9 +85,18 @@ export function qualityOptions(probe: ProbeResult): QualityOption[] {
       mergeFormat: 'mp4'
     })
   }
-  opts.push({ key: 'mp3', label: 'MP3', sub: '320 kbps', kind: 'audio', format: 'ba/b', audioOnly: true, audioFormat: 'mp3' })
-  opts.push({ key: 'm4a', label: 'M4A', sub: 'AAC', kind: 'audio', format: 'ba/b', audioOnly: true, audioFormat: 'm4a' })
+  opts.push({ key: 'mp3', label: 'MP3', sub: '320 kbps', kind: 'audio', format: 'ba/b', audioOnly: true, audioFormat: 'mp3', size: bestAudio })
+  opts.push({ key: 'm4a', label: 'M4A', sub: 'AAC', kind: 'audio', format: 'ba/b', audioOnly: true, audioFormat: 'm4a', size: bestAudio })
   return opts
+}
+
+/** Estimate the size for a video tier: best format at/under the height (+ best audio if video-only). */
+function videoSizeAt(fmts: FormatInfo[], h: number, bestAudio?: number): number | undefined {
+  const cands = fmts.filter((f) => f.height != null && f.height <= h)
+  if (!cands.length) return undefined
+  const best = cands.reduce((a, b) => ((b.height ?? 0) > (a.height ?? 0) ? b : a))
+  if (best.filesize == null) return undefined
+  return best.isVideoOnly && bestAudio ? best.filesize + bestAudio : best.filesize
 }
 
 export function fmtBytes(n: number | null | undefined): string {

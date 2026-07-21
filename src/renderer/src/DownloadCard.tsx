@@ -1,6 +1,19 @@
+import { useState } from 'react'
 import type { QueueItem } from './lib'
-import { fmtSpeed, fmtEta, langLabel } from './lib'
-import { IconVideo, IconMusic, IconCheck, IconAlert, IconExternal, IconRetry, IconTrash, IconX, IconCaptions } from './icons'
+import { fmtSpeed, fmtEta, fmtBytes, langLabel } from './lib'
+import {
+  IconVideo,
+  IconMusic,
+  IconCheck,
+  IconAlert,
+  IconFolder,
+  IconPlay,
+  IconRetry,
+  IconTrash,
+  IconX,
+  IconCaptions,
+  IconRefresh
+} from './icons'
 
 interface Props {
   item: QueueItem
@@ -8,17 +21,26 @@ interface Props {
   onRetry: (id: string) => void
   onRemove: (id: string) => void
   onReveal: (path: string) => void
+  onOpen: (path: string) => void
+  onUpdateAndRetry: (id: string) => void
 }
 
-export default function DownloadCard({ item, onCancel, onRetry, onRemove, onReveal }: Props): JSX.Element {
+export default function DownloadCard({ item, onCancel, onRetry, onRemove, onReveal, onOpen, onUpdateAndRetry }: Props): JSX.Element {
+  const [imgFailed, setImgFailed] = useState(false)
   const active = item.status === 'downloading' || item.status === 'postprocessing'
   const pct = item.progress?.percent ?? null
+  const done = item.status === 'done' && !!item.result?.filepath
+  const showThumb = item.thumbnail && !imgFailed
 
   return (
-    <div className={`dl-card ${item.status}`}>
+    <div
+      className={`dl-card ${item.status}`}
+      onDoubleClick={() => done && onOpen(item.result!.filepath!)}
+      title={done ? 'Double-cliquer pour ouvrir' : undefined}
+    >
       <div className="dl-thumb">
-        {item.thumbnail ? (
-          <img src={item.thumbnail} alt="" />
+        {showThumb ? (
+          <img src={item.thumbnail!} alt="" onError={() => setImgFailed(true)} />
         ) : item.audioOnly ? (
           <IconMusic size={22} />
         ) : (
@@ -42,7 +64,7 @@ export default function DownloadCard({ item, onCancel, onRetry, onRemove, onReve
         </div>
 
         <div className="dl-status">
-          <StatusLine item={item} />
+          <StatusLine item={item} onUpdateAndRetry={onUpdateAndRetry} />
         </div>
 
         {(active || pct != null) && (
@@ -57,22 +79,27 @@ export default function DownloadCard({ item, onCancel, onRetry, onRemove, onReve
 
       <div className="dl-actions">
         {active && (
-          <button className="icon-btn danger" title="Annuler" onClick={() => onCancel(item.id)}>
+          <button className="icon-btn danger" title="Annuler" aria-label="Annuler" onClick={() => onCancel(item.id)}>
             <IconX size={16} />
           </button>
         )}
-        {item.status === 'done' && item.result?.filepath && (
-          <button className="icon-btn" title="Révéler dans le Finder" onClick={() => onReveal(item.result!.filepath!)}>
-            <IconExternal size={16} />
-          </button>
+        {done && (
+          <>
+            <button className="icon-btn" title="Ouvrir le fichier" aria-label="Ouvrir le fichier" onClick={() => onOpen(item.result!.filepath!)}>
+              <IconPlay size={16} />
+            </button>
+            <button className="icon-btn" title="Afficher dans le Finder" aria-label="Afficher dans le Finder" onClick={() => onReveal(item.result!.filepath!)}>
+              <IconFolder size={16} />
+            </button>
+          </>
         )}
-        {(item.status === 'error' || item.status === 'canceled') && (
-          <button className="icon-btn" title="Relancer" onClick={() => onRetry(item.id)}>
+        {(item.status === 'error' && item.result?.errorKind !== 'drm') || item.status === 'canceled' ? (
+          <button className="icon-btn" title="Relancer" aria-label="Relancer" onClick={() => onRetry(item.id)}>
             <IconRetry size={16} />
           </button>
-        )}
+        ) : null}
         {!active && (
-          <button className="icon-btn" title="Retirer" onClick={() => onRemove(item.id)}>
+          <button className="icon-btn" title="Retirer" aria-label="Retirer" onClick={() => onRemove(item.id)}>
             <IconTrash size={16} />
           </button>
         )}
@@ -81,7 +108,7 @@ export default function DownloadCard({ item, onCancel, onRetry, onRemove, onReve
   )
 }
 
-function StatusLine({ item }: { item: QueueItem }): JSX.Element {
+function StatusLine({ item, onUpdateAndRetry }: { item: QueueItem; onUpdateAndRetry: (id: string) => void }): JSX.Element {
   switch (item.status) {
     case 'queued':
       return <span className="muted">En attente…</span>
@@ -89,6 +116,7 @@ function StatusLine({ item }: { item: QueueItem }): JSX.Element {
       const p = item.progress
       const parts = [
         p?.percent != null ? `${p.percent.toFixed(0)} %` : 'Téléchargement…',
+        p?.totalBytes != null ? `${fmtBytes(p.downloadedBytes)} / ${fmtBytes(p.totalBytes)}` : '',
         fmtSpeed(p?.speed),
         p?.eta != null ? `${fmtEta(p.eta)} restant` : ''
       ].filter(Boolean)
@@ -104,11 +132,34 @@ function StatusLine({ item }: { item: QueueItem }): JSX.Element {
       )
     case 'canceled':
       return <span className="muted">Annulé</span>
-    case 'error':
+    case 'error': {
+      const kind = item.result?.errorKind
+      const label =
+        kind === 'network'
+          ? 'Problème de connexion'
+          : kind === 'extractor'
+            ? 'Extraction impossible — moteur peut-être obsolète'
+            : kind === 'drm'
+              ? 'Contenu protégé par DRM'
+              : 'Échec du téléchargement'
       return (
-        <span className="fail" title={item.result?.error ?? ''}>
-          <IconAlert size={13} /> {item.result?.error ?? 'Erreur'}
-        </span>
+        <div className="err-wrap">
+          <span className="fail">
+            <IconAlert size={13} /> {label}
+            {kind === 'extractor' && (
+              <button className="link-btn update-inline" onClick={() => onUpdateAndRetry(item.id)}>
+                <IconRefresh size={12} /> Mettre à jour yt-dlp
+              </button>
+            )}
+          </span>
+          {item.result?.error && (
+            <details className="err-details">
+              <summary>Détails</summary>
+              <pre>{item.result.error}</pre>
+            </details>
+          )}
+        </div>
       )
+    }
   }
 }
