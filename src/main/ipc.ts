@@ -6,6 +6,7 @@ import { promisify } from 'node:util'
 import type { VersionInfo, DownloadRequest } from '../shared/types'
 import { ytDlpArgs, ffmpegPath, engineEnv } from './binaries'
 import { probe, download, cancel, updateEngine } from './engine'
+import { loadQueue, saveQueue } from './store'
 
 const execFileP = promisify(execFile)
 
@@ -68,4 +69,7 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('shell:reveal', (_e, p: string) => shell.showItemInFolder(p))
+
+  ipcMain.handle('queue:load', () => loadQueue())
+  ipcMain.handle('queue:save', (_e, items: unknown[]) => saveQueue(items))
 }

@@ -21,6 +21,7 @@ export default function App(): JSX.Element {
   const itemsRef = useRef<QueueItem[]>([])
   const startedRef = useRef<Set<string>>(new Set())
   const outputDirRef = useRef('')
+  const loadedRef = useRef(false)
 
   // ── init ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -29,6 +30,17 @@ export default function App(): JSX.Element {
       outputDirRef.current = d
     })
     window.api.getVersions().then(setVersions)
+    window.api.loadQueue().then((saved) => {
+      // Restore the list; interrupted (non-terminal) items become 'queued' so the
+      // scheduler auto-resumes them (yt-dlp continues partial .part files).
+      const restored = (saved as QueueItem[]).map((i) =>
+        i.status === 'downloading' || i.status === 'postprocessing' || i.status === 'queued'
+          ? { ...i, status: 'queued' as ItemStatus, progress: null }
+          : { ...i, progress: null }
+      )
+      setItems(restored)
+      loadedRef.current = true
+    })
     const off = window.api.onProgress((ev) => {
       setItems((prev) =>
         prev.map((i) => {
@@ -53,6 +65,16 @@ export default function App(): JSX.Element {
     setItems((prev) => prev.map((i) => (toStart.some((t) => t.id === i.id) ? { ...i, status: 'downloading' } : i)))
     toStart.forEach(runDownload)
   }, [items])
+
+  // ── persistence: save on status/result changes (not on every progress tick) ──
+  const saveSig = items.map((i) => `${i.id}:${i.status}:${i.result?.filepath ?? ''}`).join('|')
+  useEffect(() => {
+    if (!loadedRef.current) return
+    const snapshot = items.map((i) => ({ ...i, progress: null }))
+    const t = setTimeout(() => window.api.saveQueue(snapshot), 500)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveSig])
 
   async function runDownload(item: QueueItem): Promise<void> {
     const req: DownloadRequest = {

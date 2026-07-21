@@ -35,6 +35,7 @@ export interface QualityOption {
 export function qualityOptions(probe: ProbeResult): QualityOption[] {
   const maxH = probe.formats.reduce((m, f) => Math.max(m, f.height ?? 0), 0)
   const tiers = [
+    { label: '8K', sub: '4320p', h: 4320 },
     { label: '4K', sub: '2160p', h: 2160 },
     { label: '1440p', sub: 'QHD', h: 1440 },
     { label: '1080p', sub: 'Full HD', h: 1080 },

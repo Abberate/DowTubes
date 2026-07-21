@@ -18,6 +18,8 @@ const api = {
   updateEngine: (): Promise<string> => ipcRenderer.invoke('engine:update'),
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('dialog:pickFolder'),
   reveal: (path: string): Promise<void> => ipcRenderer.invoke('shell:reveal', path),
+  loadQueue: (): Promise<unknown[]> => ipcRenderer.invoke('queue:load'),
+  saveQueue: (items: unknown[]): Promise<void> => ipcRenderer.invoke('queue:save', items),
   /** Subscribe to progress events; returns an unsubscribe function. */
   onProgress: (cb: (ev: ProgressEvent) => void): (() => void) => {
     const listener = (_e: unknown, ev: ProgressEvent): void => cb(ev)
