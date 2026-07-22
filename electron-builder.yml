@@ -27,7 +27,10 @@ extraResources:
     filter: ["**/*"]
   - from: resources/python
     to: python
-    filter: ["**/*"]
+    # Exclude prebuilt .pyc: they go stale when copied (mtime changes) and Python
+    # would rewrite them into the signed bundle. Bytecode is cached to userData at
+    # runtime (PYTHONPYCACHEPREFIX) instead.
+    filter: ["**/*", "!**/__pycache__/**"]
   - from: resources/icon.png
     to: icon.png
 mac:

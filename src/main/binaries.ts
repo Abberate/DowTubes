@@ -71,5 +71,9 @@ export function ffprobePath(): string {
 export function engineEnv(): NodeJS.ProcessEnv {
   const extra = [dirname(ffmpegPath()), dirname(ffprobePath())].filter(Boolean)
   const path = [...extra, process.env.PATH ?? ''].join(isWin ? ';' : ':')
-  return { ...process.env, PATH: path }
+  // CRITICAL: redirect Python's .pyc cache OUT of the app bundle. Writing bytecode
+  // into the (signed) bundle mutates sealed resources and invalidates the code
+  // signature, so macOS would kill the app on its next launch. Caching to userData
+  // keeps the bundle immutable while staying fast after the first run.
+  return { ...process.env, PATH: path, PYTHONPYCACHEPREFIX: join(app.getPath('userData'), 'pycache') }
 }
