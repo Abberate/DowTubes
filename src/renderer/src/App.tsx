@@ -451,6 +451,7 @@ export default function App(): JSX.Element {
             <IconInbox size={40} />
             <p>Aucun téléchargement</p>
             <span>Colle ou dépose un lien ci-dessus pour commencer.</span>
+            <span className="empty-credit">Développé par B.A Abdoulaye</span>
           </div>
         ) : (
           items.map((it) => (
@@ -502,6 +503,7 @@ export default function App(): JSX.Element {
           settings={settings}
           concurrency={concurrency}
           outputDir={outputDir}
+          version={versions?.app ?? ''}
           onChange={updateSettings}
           onConcurrency={changeConcurrency}
           onChangeFolder={changeFolder}

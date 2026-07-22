@@ -1,8 +1,12 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell, nativeImage } from 'electron'
 import { join } from 'node:path'
 import { registerIpc } from './ipc'
 import { killAll } from './engine'
 import { buildMenu } from './menu'
+
+function iconPath(): string {
+  return join(app.isPackaged ? process.resourcesPath : app.getAppPath(), 'resources', 'icon.png')
+}
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -12,7 +16,8 @@ function createWindow(): void {
     minHeight: 560,
     show: false,
     title: 'DowTubes',
-    backgroundColor: '#14161c',
+    icon: iconPath(),
+    backgroundColor: '#0f0f12',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       // Security posture: untrusted renderer, all privilege stays in main.
@@ -37,7 +42,20 @@ function createWindow(): void {
   }
 }
 
+app.setName('DowTubes')
+
 app.whenReady().then(() => {
+  app.setAboutPanelOptions({
+    applicationName: 'DowTubes',
+    applicationVersion: app.getVersion(),
+    credits: 'Développé par B.A Abdoulaye',
+    copyright: '© 2026 B.A Abdoulaye'
+  })
+  // Dev: show our icon in the Dock instead of the default Electron one.
+  if (process.platform === 'darwin' && !app.isPackaged) {
+    const icon = nativeImage.createFromPath(iconPath())
+    if (!icon.isEmpty()) app.dock?.setIcon(icon)
+  }
   registerIpc()
   buildMenu()
   createWindow()

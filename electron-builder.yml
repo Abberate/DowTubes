@@ -24,6 +24,8 @@ extraResources:
 mac:
   target: dmg
   category: public.app-category.utilities
+  icon: build/icon.icns
   # Unsigned for now (internal sharing). Phase 6 adds Developer ID + notarization.
 win:
   target: nsis
+  icon: build/icon.png

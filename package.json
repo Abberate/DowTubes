@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Cross-platform Downie-like video/audio downloader built on yt-dlp + ffmpeg",
   "main": "./out/main/index.js",
-  "author": "",
+  "author": "B.A Abdoulaye",
   "license": "MIT",
   "private": true,
   "scripts": {

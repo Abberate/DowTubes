@@ -1,10 +1,11 @@
 import type { AppSettings } from '../../shared/types'
-import { IconX } from './icons'
+import { IconX, IconDownload } from './icons'
 
 interface Props {
   settings: AppSettings
   concurrency: number
   outputDir: string
+  version: string
   onChange: (patch: Partial<AppSettings>) => void
   onConcurrency: (n: number) => void
   onChangeFolder: () => void
@@ -16,6 +17,7 @@ export default function Settings({
   settings,
   concurrency,
   outputDir,
+  version,
   onChange,
   onConcurrency,
   onChangeFolder,
@@ -64,6 +66,18 @@ export default function Settings({
         <Toggle label="Notifications à la fin d'un téléchargement" checked={settings.notify} onChange={(v) => onChange({ notify: v })} />
         <Toggle label="Intégrer les métadonnées (titre, auteur…)" checked={settings.embedMetadata} onChange={(v) => onChange({ embedMetadata: v })} />
         <Toggle label="Intégrer la pochette dans les MP3" checked={settings.embedThumbnail} onChange={(v) => onChange({ embedThumbnail: v })} />
+
+        <div className="modal-about">
+          <div className="about-logo">
+            <IconDownload size={20} />
+          </div>
+          <div className="about-text">
+            <div className="about-name">DowTubes{version ? ` · v${version}` : ''}</div>
+            <div className="about-credit">
+              Développé par <b>B.A Abdoulaye</b>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )
