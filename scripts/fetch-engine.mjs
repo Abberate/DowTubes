@@ -34,10 +34,19 @@ function download(url, dest, redirects = 0) {
   })
 }
 
+// Authenticated GitHub API calls get 5000 req/h instead of 60/h — CI runners share
+// IPs and hit the unauthenticated limit (HTTP 403) constantly, so pass the token.
+function ghHeaders() {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN
+  const h = { 'User-Agent': 'dowtubes-fetch', Accept: 'application/vnd.github+json' }
+  if (token) h.Authorization = `Bearer ${token}`
+  return h
+}
+
 function getJson(url, redirects = 0) {
   return new Promise((resolve, reject) => {
     if (redirects > 10) return reject(new Error('Too many redirects'))
-    get(url, { headers: { 'User-Agent': 'dowtubes-fetch', Accept: 'application/vnd.github+json' } }, (res) => {
+    get(url, { headers: ghHeaders() }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         res.resume()
         return resolve(getJson(res.headers.location, redirects + 1))
@@ -132,7 +141,9 @@ try {
   await fetchYtDlp()
   await fetchPython()
 } catch (e) {
-  // Never fail the whole install; the app can fetch/update on first run.
-  console.error(`[engine] fetch failed (non-fatal): ${e.message}`)
-  process.exit(0)
+  console.error(`[engine] fetch failed: ${e.message}`)
+  // In CI we're producing a distributable installer: a missing Python/engine means a
+  // BROKEN app (Python isn't self-fetched at runtime), so fail loudly. Locally stay
+  // non-fatal — a dev already has the engine or can retry / self-update.
+  process.exit(process.env.CI ? 1 : 0)
 }

@@ -5,6 +5,10 @@ on:
   push:
     tags: ['v*']
 
+# Needed so the built-in GITHUB_TOKEN can attach installers to the Release.
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -16,6 +20,10 @@ jobs:
           - os: windows-latest # → NSIS .exe
             script: dist:win
     runs-on: ${{ matrix.os }}
+    env:
+      # Authenticated GitHub API for scripts/fetch-engine.mjs (avoids the 60 req/h
+      # unauthenticated rate limit → HTTP 403 when fetching standalone Python).
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,3 +45,12 @@ jobs:
             dist/*.dmg
             dist/*.exe
           if-no-files-found: ignore
+
+      # Attach the Windows installer to the GitHub Release for this tag. (The macOS
+      # DMG is published from a locally-verified ad-hoc-signed build.)
+      - name: Attach Windows installer to the release
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'windows-latest'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
+          fail_on_unmatched_files: false
