@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import type { QueueItem } from './lib'
-import { fmtSpeed, fmtEta, fmtBytes, langLabel } from './lib'
+import { useRef, useState } from 'react'
+import type { QueueItem, QualityOption } from './lib'
+import { fmtSpeed, fmtEta, fmtBytes, langLabel, VARIANTS } from './lib'
 import {
   IconVideo,
   IconMusic,
@@ -13,7 +13,9 @@ import {
   IconTrash,
   IconCaptions,
   IconRefresh,
-  IconArrowUp
+  IconArrowUp,
+  IconMore,
+  IconSearch
 } from './icons'
 
 interface Props {
@@ -26,6 +28,8 @@ interface Props {
   onOpen: (path: string) => void
   onStartNow: (id: string) => void
   onUpdateAndRetry: (id: string) => void
+  onVariant: (item: QueueItem, opt: QualityOption) => void
+  onReprobe: (url: string) => void
   dragging: boolean
   onReorderStart: (id: string) => void
   onReorderOver: (id: string) => void
@@ -42,12 +46,24 @@ export default function DownloadCard({
   onOpen,
   onStartNow,
   onUpdateAndRetry,
+  onVariant,
+  onReprobe,
   dragging,
   onReorderStart,
   onReorderOver,
   onReorderEnd
 }: Props): JSX.Element {
   const [imgFailed, setImgFailed] = useState(false)
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null)
+  const moreRef = useRef<HTMLButtonElement>(null)
+  function toggleMenu(): void {
+    if (menuPos) {
+      setMenuPos(null)
+      return
+    }
+    const r = moreRef.current?.getBoundingClientRect()
+    if (r) setMenuPos({ top: r.bottom + 5, right: window.innerWidth - r.right })
+  }
   const active = item.status === 'downloading' || item.status === 'postprocessing'
   const pct = item.progress?.percent ?? null
   const done = item.status === 'done' && !!item.result?.filepath
@@ -137,6 +153,9 @@ export default function DownloadCard({
             <button className="icon-btn" title="Afficher dans le Finder" aria-label="Afficher dans le Finder" onClick={() => onReveal(item.result!.filepath!)}>
               <IconFolder size={16} />
             </button>
+            <button ref={moreRef} className="icon-btn" title="Plus d'options" aria-label="Plus d'options" onClick={toggleMenu}>
+              <IconMore size={16} />
+            </button>
           </>
         )}
         {canRetry && (
@@ -148,6 +167,38 @@ export default function DownloadCard({
           <IconTrash size={16} />
         </button>
       </div>
+
+      {menuPos && (
+        <>
+          <div className="menu-backdrop" onClick={() => setMenuPos(null)} />
+          <div className="item-menu" style={{ top: menuPos.top, right: menuPos.right }}>
+            <div className="menu-label">Télécharger une variante</div>
+            {VARIANTS.map((v) => (
+              <button
+                key={v.key}
+                className="menu-item"
+                onClick={() => {
+                  onVariant(item, v)
+                  setMenuPos(null)
+                }}
+              >
+                {v.kind === 'audio' ? <IconMusic size={14} /> : <IconVideo size={14} />}
+                {v.label}
+              </button>
+            ))}
+            <div className="menu-sep" />
+            <button
+              className="menu-item"
+              onClick={() => {
+                onReprobe(item.url)
+                setMenuPos(null)
+              }}
+            >
+              <IconSearch size={14} /> Ré-analyser le lien…
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }

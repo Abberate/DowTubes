@@ -185,6 +185,17 @@ export const IconClipboard = ({ size, className }: P): JSX.Element =>
 export const IconPlay = ({ size, className }: P): JSX.Element =>
   svg(<path d="M7 4.5v15l12-7.5z" />, size, className)
 
+export const IconMore = ({ size, className }: P): JSX.Element =>
+  svg(
+    <>
+      <circle cx="5" cy="12" r="1.4" />
+      <circle cx="12" cy="12" r="1.4" />
+      <circle cx="19" cy="12" r="1.4" />
+    </>,
+    size,
+    className
+  )
+
 export const IconPause = ({ size, className }: P): JSX.Element =>
   svg(
     <>

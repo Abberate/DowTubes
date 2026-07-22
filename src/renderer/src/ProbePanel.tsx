@@ -10,7 +10,7 @@ import {
   type SubtitleChoice
 } from './lib'
 
-import { IconDownload, IconLock, IconVideo, IconMusic, IconX, IconCaptions, IconCheck, IconPlaylist } from './icons'
+import { IconDownload, IconLock, IconVideo, IconMusic, IconX, IconCaptions, IconPlaylist } from './icons'
 
 const LAST_QUALITY_KEY = 'dowtubes.lastQuality'
 
@@ -37,7 +37,6 @@ export default function ProbePanel({ probe, playlist, onDownload, onDownloadAll,
   const [subOn, setSubOn] = useState(false)
   const [subLang, setSubLang] = useState<string>(subs[0]?.code ?? '')
   const [subEmbed, setSubEmbed] = useState(false)
-  const [addedCount, setAddedCount] = useState(0)
 
   const chosen = options.find((o) => o.key === selected) ?? options[0]
   const isVideo = chosen?.kind === 'video'
@@ -52,7 +51,6 @@ export default function ProbePanel({ probe, playlist, onDownload, onDownloadAll,
     if (!chosen) return
     onDownload(chosen, buildSubtitle())
     localStorage.setItem(LAST_QUALITY_KEY, chosen.label)
-    setAddedCount((c) => c + 1)
   }
   function handleDownloadAll(): void {
     if (!chosen || !playlist) return
@@ -176,13 +174,6 @@ export default function ProbePanel({ probe, playlist, onDownload, onDownloadAll,
             {playlist ? 'Télécharger cette vidéo en ' : 'Télécharger en '}
             {chosen?.label}
           </button>
-
-          {addedCount > 0 && (
-            <div className="probe-added">
-              <IconCheck size={14} /> {addedCount} option{addedCount > 1 ? 's' : ''} ajoutée
-              {addedCount > 1 ? 's' : ''} — choisis-en une autre ou ferme
-            </div>
-          )}
         </>
       )}
     </div>

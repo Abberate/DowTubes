@@ -50,7 +50,9 @@ export default function App(): JSX.Element {
   })
 
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const itemsRef = useRef<QueueItem[]>([])
   const startedRef = useRef<Set<string>>(new Set())
   const outputDirRef = useRef('')
@@ -260,6 +262,12 @@ export default function App(): JSX.Element {
     return `${i.url}|${i.format}|${i.audioFormat ?? ''}|${i.subtitle?.lang ?? ''}|${i.subtitle?.embed ?? ''}`
   }
 
+  function showToast(msg: string): void {
+    setToast(msg)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 2600)
+  }
+
   function addToQueue(opt: QualityOption, subtitle: SubtitleChoice | null): void {
     if (!probe) return
     const item = newItem(
@@ -268,8 +276,34 @@ export default function App(): JSX.Element {
       subtitle
     )
     const active = new Set(itemsRef.current.filter((i) => !TERMINAL.includes(i.status)).map(dupeKey))
-    if (active.has(dupeKey(item))) return
+    if (active.has(dupeKey(item))) {
+      showToast('Déjà dans la liste')
+    } else {
+      setItems((prev) => [item, ...prev])
+      showToast('Téléchargement ajouté')
+    }
+    closeProbe()
+  }
+
+  // Download another variant (audio, other quality) of an already-listed item — no re-probe.
+  function addVariant(src: QueueItem, opt: QualityOption): void {
+    const item = newItem(
+      { url: src.url, title: src.title, thumbnail: src.thumbnail, id: src.expectedId ?? '' },
+      opt,
+      null
+    )
+    const active = new Set(itemsRef.current.filter((i) => !TERMINAL.includes(i.status)).map(dupeKey))
+    if (active.has(dupeKey(item))) {
+      showToast('Déjà dans la liste')
+      return
+    }
     setItems((prev) => [item, ...prev])
+    showToast(`${opt.label} ajouté`)
+  }
+
+  function reprobe(url: string): void {
+    setUrl(url)
+    doProbe(url)
   }
 
   function addPlaylistToQueue(opt: QualityOption, subtitle: SubtitleChoice | null): void {
@@ -278,7 +312,10 @@ export default function App(): JSX.Element {
     const fresh = playlist.entries
       .map((e) => newItem({ url: e.url, title: e.title, thumbnail: null, id: e.id }, opt, subtitle))
       .filter((i) => !active.has(dupeKey(i)))
-    if (fresh.length) setItems((prev) => [...fresh, ...prev])
+    if (fresh.length) {
+      setItems((prev) => [...fresh, ...prev])
+      showToast(`${fresh.length} vidéo${fresh.length > 1 ? 's' : ''} ajoutée${fresh.length > 1 ? 's' : ''}`)
+    }
     closeProbe()
   }
 
@@ -494,6 +531,8 @@ export default function App(): JSX.Element {
               onOpen={(p) => window.api.openPath(p)}
               onStartNow={startNow}
               onUpdateAndRetry={updateAndRetry}
+              onVariant={addVariant}
+              onReprobe={reprobe}
               dragging={it.id === draggingId}
               onReorderStart={reorderStart}
               onReorderOver={reorderOver}
@@ -542,6 +581,12 @@ export default function App(): JSX.Element {
           onOpenFolder={openFolder}
           onClose={() => setSettingsOpen(false)}
         />
+      )}
+
+      {toast && (
+        <div className="toast" role="status">
+          {toast}
+        </div>
       )}
     </div>
   )

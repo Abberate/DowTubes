@@ -26,6 +26,14 @@ export interface SubtitleChoice {
   embed: boolean
 }
 
+/** Quick variants offered from a downloaded item's "…" menu (no re-probe needed). */
+export const VARIANTS: QualityOption[] = [
+  { key: 'mp3', label: 'Audio MP3', sub: '', kind: 'audio', format: 'ba/b', audioOnly: true, audioFormat: 'mp3' },
+  { key: 'm4a', label: 'Audio M4A', sub: '', kind: 'audio', format: 'ba/b', audioOnly: true, audioFormat: 'm4a' },
+  { key: 'v1080', label: 'Vidéo 1080p', sub: '', kind: 'video', format: 'bv*[height<=1080]+ba/b', audioOnly: false, mergeFormat: 'mp4' },
+  { key: 'vbest', label: 'Meilleure vidéo', sub: '', kind: 'video', format: 'bv*+ba/b', audioOnly: false, mergeFormat: 'mp4' }
+]
+
 export interface SubLang {
   code: string
   auto: boolean
