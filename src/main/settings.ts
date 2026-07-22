@@ -6,7 +6,8 @@ import type { AppSettings } from '../shared/types'
 const DEFAULTS: AppSettings = {
   notify: true,
   embedMetadata: true,
-  embedThumbnail: true
+  embedThumbnail: true,
+  cookiesBrowser: ''
 }
 
 let cache: AppSettings | null = null

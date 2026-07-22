@@ -25,7 +25,7 @@ import {
 
 const TERMINAL: ItemStatus[] = ['done', 'error', 'canceled']
 const CONCURRENCY_KEY = 'dowtubes.concurrency'
-const DEFAULT_SETTINGS: AppSettings = { notify: true, embedMetadata: true, embedThumbnail: true }
+const DEFAULT_SETTINGS: AppSettings = { notify: true, embedMetadata: true, embedThumbnail: true, cookiesBrowser: '' }
 
 function looksLikePlaylist(u: string): boolean {
   return /[?&]list=|\/playlist|\/@|\/channel\/|\/c\/|\/user\//i.test(u)

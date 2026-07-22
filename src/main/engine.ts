@@ -27,9 +27,15 @@ let probeAbort: AbortController | null = null
 
 // ── Probe ───────────────────────────────────────────────────────────────────
 
+/** `--cookies-from-browser <browser>` when the user has picked one (bypasses YouTube's bot check). */
+function cookieArgs(): string[] {
+  const b = getSettings().cookiesBrowser
+  return b ? ['--cookies-from-browser', b] : []
+}
+
 /** Resolve a URL to a typed info_dict via `yt-dlp -J`. Throws on failure. */
 export async function probe(url: string): Promise<ProbeResult> {
-  const { cmd, args } = ytDlpArgs(['-J', '--no-warnings', '--no-playlist', url])
+  const { cmd, args } = ytDlpArgs(['-J', '--no-warnings', '--no-playlist', ...cookieArgs(), url])
   probeAbort = new AbortController()
   let stdout: string
   try {
@@ -99,7 +105,7 @@ export function cancelProbe(): void {
 
 /** Detect a playlist/channel and return a flat list of its videos (up to 100). Null if not a playlist. */
 export async function probePlaylist(url: string): Promise<PlaylistInfo | null> {
-  const { cmd, args } = ytDlpArgs(['--flat-playlist', '-J', '--playlist-end', '100', '--no-warnings', url])
+  const { cmd, args } = ytDlpArgs(['--flat-playlist', '-J', '--playlist-end', '100', '--no-warnings', ...cookieArgs(), url])
   let stdout: string
   try {
     const res = await execFileP(cmd, args, { timeout: 60_000, maxBuffer: 64 * 1024 * 1024, env: engineEnv() })
@@ -283,7 +289,7 @@ function downloadFile(url: string, dest: string, redirects = 0): Promise<void> {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function buildArgs(req: DownloadRequest): string[] {
-  const args = ['--newline', '--no-warnings', '--ignore-config', '--no-playlist']
+  const args = ['--newline', '--no-warnings', '--ignore-config', '--no-playlist', ...cookieArgs()]
 
   if (req.audioOnly) {
     args.push('-f', req.format || 'ba/b', '-x', '--audio-format', req.audioFormat || 'mp3', '--audio-quality', '0')
@@ -390,6 +396,8 @@ function cleanupPartials(dir: string, id?: string): void {
 
 function classifyError(stderr: string): DownloadErrorKind {
   const s = stderr.toLowerCase()
+  // YouTube's anti-bot gate — fixed by enabling browser cookies in Settings.
+  if (/confirm you'?re not a bot|sign in to confirm|cookies-from-browser/.test(s)) return 'extractor'
   if (/drm|has_drm|drm protected/.test(s)) return 'drm'
   if (/http error|urlopen error|network|timed out|timeout|connection|temporary failure|getaddrinfo/.test(s))
     return 'network'
@@ -399,6 +407,10 @@ function classifyError(stderr: string): DownloadErrorKind {
 }
 
 function humanError(stderr: string): string {
+  // Turn YouTube's cryptic bot-check into an actionable message.
+  if (/confirm you'?re not a bot|sign in to confirm/i.test(stderr)) {
+    return 'YouTube demande une vérification. Ouvre Réglages → « Cookies du navigateur » et choisis le navigateur où tu es connecté à YouTube.'
+  }
   const line = stderr
     .split('\n')
     .map((l) => l.trim())

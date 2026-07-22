@@ -50,10 +50,24 @@ export interface PlaylistInfo {
 }
 
 /** App-wide settings persisted in userData/settings.json. */
+/** Browser to pull YouTube cookies from (yt-dlp --cookies-from-browser). '' = none. */
+export type CookieBrowser =
+  | ''
+  | 'safari'
+  | 'chrome'
+  | 'brave'
+  | 'edge'
+  | 'chromium'
+  | 'firefox'
+  | 'opera'
+  | 'vivaldi'
+
 export interface AppSettings {
   notify: boolean
   embedMetadata: boolean
   embedThumbnail: boolean
+  /** Use a logged-in browser's cookies to bypass YouTube's "confirm you're not a bot". */
+  cookiesBrowser: CookieBrowser
 }
 
 /** Result of scanning the download folder to reconstruct the list. */

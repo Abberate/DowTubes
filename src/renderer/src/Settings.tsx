@@ -63,6 +63,31 @@ export default function Settings({
           </select>
         </div>
 
+        <div className="setting-row">
+          <div className="setting-label">
+            <span>Cookies du navigateur</span>
+            <span className="setting-hint">
+              Contre le message « confirmez que vous n'êtes pas un robot » de YouTube. Choisis le
+              navigateur où tu es connecté à YouTube.
+            </span>
+          </div>
+          <select
+            className="sub-select mini"
+            value={settings.cookiesBrowser}
+            onChange={(e) => onChange({ cookiesBrowser: e.target.value as AppSettings['cookiesBrowser'] })}
+          >
+            <option value="">Aucun</option>
+            <option value="safari">Safari</option>
+            <option value="chrome">Chrome</option>
+            <option value="brave">Brave</option>
+            <option value="edge">Edge</option>
+            <option value="chromium">Chromium</option>
+            <option value="firefox">Firefox</option>
+            <option value="opera">Opera</option>
+            <option value="vivaldi">Vivaldi</option>
+          </select>
+        </div>
+
         <Toggle label="Notifications à la fin d'un téléchargement" checked={settings.notify} onChange={(v) => onChange({ notify: v })} />
         <Toggle label="Intégrer les métadonnées (titre, auteur…)" checked={settings.embedMetadata} onChange={(v) => onChange({ embedMetadata: v })} />
         <Toggle label="Intégrer la pochette dans les MP3" checked={settings.embedThumbnail} onChange={(v) => onChange({ embedThumbnail: v })} />
