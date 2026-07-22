@@ -4,7 +4,9 @@ import type {
   ProbeResult,
   DownloadRequest,
   DownloadResult,
-  ProgressEvent
+  ProgressEvent,
+  PlaylistInfo,
+  AppSettings
 } from '../shared/types'
 
 // The ONLY surface the sandboxed renderer can reach. No raw ipcRenderer, fs, or
@@ -13,6 +15,8 @@ const api = {
   getVersions: (): Promise<VersionInfo> => ipcRenderer.invoke('app:getVersions'),
   defaultOutputDir: (): Promise<string> => ipcRenderer.invoke('app:defaultOutputDir'),
   probe: (url: string): Promise<ProbeResult> => ipcRenderer.invoke('engine:probe', url),
+  probePlaylist: (url: string): Promise<PlaylistInfo | null> => ipcRenderer.invoke('engine:probePlaylist', url),
+  cancelProbe: (): Promise<void> => ipcRenderer.invoke('engine:cancelProbe'),
   download: (req: DownloadRequest): Promise<DownloadResult> => ipcRenderer.invoke('engine:download', req),
   cancel: (id: string): Promise<boolean> => ipcRenderer.invoke('engine:cancel', id),
   pause: (id: string): Promise<boolean> => ipcRenderer.invoke('engine:pause', id),
@@ -22,6 +26,13 @@ const api = {
   openPath: (path: string): Promise<string> => ipcRenderer.invoke('shell:openPath', path),
   loadQueue: (): Promise<unknown[]> => ipcRenderer.invoke('queue:load'),
   saveQueue: (items: unknown[]): Promise<void> => ipcRenderer.invoke('queue:save', items),
+  getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
+  setSettings: (patch: Partial<AppSettings>): Promise<AppSettings> => ipcRenderer.invoke('settings:set', patch),
+  onOpenSettings: (cb: () => void): (() => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('menu:openSettings', listener)
+    return () => ipcRenderer.removeListener('menu:openSettings', listener)
+  },
   /** Subscribe to progress events; returns an unsubscribe function. */
   onProgress: (cb: (ev: ProgressEvent) => void): (() => void) => {
     const listener = (_e: unknown, ev: ProgressEvent): void => cb(ev)

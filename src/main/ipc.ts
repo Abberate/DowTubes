@@ -5,8 +5,10 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { VersionInfo, DownloadRequest } from '../shared/types'
 import { ytDlpArgs, ffmpegPath, engineEnv } from './binaries'
-import { probe, download, cancel, pause, updateEngine } from './engine'
+import { probe, probePlaylist, cancelProbe, download, cancel, pause, updateEngine } from './engine'
 import { loadQueue, saveQueue } from './store'
+import { getSettings, setSettings } from './settings'
+import type { AppSettings } from '../shared/types'
 
 const execFileP = promisify(execFile)
 
@@ -50,6 +52,10 @@ export function registerIpc(): void {
 
   ipcMain.handle('engine:probe', (_e, url: string) => probe(url))
 
+  ipcMain.handle('engine:probePlaylist', (_e, url: string) => probePlaylist(url))
+
+  ipcMain.handle('engine:cancelProbe', () => cancelProbe())
+
   ipcMain.handle('engine:download', (e, req: DownloadRequest) =>
     download(req, (ev) => {
       if (!e.sender.isDestroyed()) e.sender.send('engine:progress', ev)
@@ -76,4 +82,7 @@ export function registerIpc(): void {
 
   ipcMain.handle('queue:load', () => loadQueue())
   ipcMain.handle('queue:save', (_e, items: unknown[]) => saveQueue(items))
+
+  ipcMain.handle('settings:get', () => getSettings())
+  ipcMain.handle('settings:set', (_e, patch: Partial<AppSettings>) => setSettings(patch))
 }

@@ -1,24 +1,53 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react'
-import type { ProbeResult, VersionInfo, DownloadRequest, DownloadResult } from '../../shared/types'
+import type {
+  ProbeResult,
+  VersionInfo,
+  DownloadRequest,
+  DownloadResult,
+  PlaylistInfo,
+  AppSettings
+} from '../../shared/types'
 import type { QueueItem, ItemStatus, QualityOption, SubtitleChoice } from './lib'
 import { errMsg } from './lib'
 import ProbePanel from './ProbePanel'
 import DownloadCard from './DownloadCard'
-import { IconDownload, IconSearch, IconFolder, IconInbox, IconRefresh, IconAlert, IconClipboard } from './icons'
+import SettingsModal from './Settings'
+import {
+  IconDownload,
+  IconSearch,
+  IconFolder,
+  IconInbox,
+  IconRefresh,
+  IconAlert,
+  IconClipboard,
+  IconSettings
+} from './icons'
 
-const MAX_CONCURRENT = 3
 const TERMINAL: ItemStatus[] = ['done', 'error', 'canceled']
+const CONCURRENCY_KEY = 'dowtubes.concurrency'
+const DEFAULT_SETTINGS: AppSettings = { notify: true, embedMetadata: true, embedThumbnail: true }
+
+function looksLikePlaylist(u: string): boolean {
+  return /[?&]list=|\/playlist|\/@|\/channel\/|\/c\/|\/user\//i.test(u)
+}
 
 export default function App(): JSX.Element {
   const [url, setUrl] = useState('')
   const [probing, setProbing] = useState(false)
   const [probe, setProbe] = useState<ProbeResult | null>(null)
+  const [playlist, setPlaylist] = useState<PlaylistInfo | null>(null)
   const [probeErr, setProbeErr] = useState('')
   const [items, setItems] = useState<QueueItem[]>([])
   const [outputDir, setOutputDir] = useState('')
   const [versions, setVersions] = useState<VersionInfo | null>(null)
   const [updating, setUpdating] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [concurrency, setConcurrencyValue] = useState<number>(() => {
+    const v = Number(localStorage.getItem(CONCURRENCY_KEY))
+    return v >= 1 && v <= 5 ? v : 3
+  })
 
   const itemsRef = useRef<QueueItem[]>([])
   const startedRef = useRef<Set<string>>(new Set())
@@ -33,6 +62,7 @@ export default function App(): JSX.Element {
       outputDirRef.current = d
     })
     window.api.getVersions().then(setVersions)
+    window.api.getSettings().then(setSettings)
     window.api.loadQueue().then((saved) => {
       const restored = (saved as QueueItem[]).map((i) =>
         i.status === 'downloading' || i.status === 'postprocessing' || i.status === 'queued'
@@ -42,7 +72,6 @@ export default function App(): JSX.Element {
       setItems(restored)
       loadedRef.current = true
     })
-    // Live progress only drives active items; terminal state is set by runDownload.
     const off = window.api.onProgress((ev) => {
       if (ev.phase !== 'downloading' && ev.phase !== 'postprocessing') return
       setItems((prev) =>
@@ -51,23 +80,27 @@ export default function App(): JSX.Element {
         )
       )
     })
-    return off
+    const offSettings = window.api.onOpenSettings(() => setSettingsOpen(true))
+    return () => {
+      off()
+      offSettings()
+    }
   }, [])
 
-  // ── scheduler: keep up to MAX_CONCURRENT running ─────────────────────────
+  // ── scheduler ─────────────────────────────────────────────────────────────
   useEffect(() => {
     itemsRef.current = items
     const running = items.filter((i) => i.status === 'downloading' || i.status === 'postprocessing').length
-    const slots = MAX_CONCURRENT - running
+    const slots = concurrency - running
     if (slots <= 0) return
     const toStart = items.filter((i) => i.status === 'queued' && !startedRef.current.has(i.id)).slice(0, slots)
     if (!toStart.length) return
     toStart.forEach((i) => startedRef.current.add(i.id))
     setItems((prev) => prev.map((i) => (toStart.some((t) => t.id === i.id) ? { ...i, status: 'downloading' } : i)))
     toStart.forEach(runDownload)
-  }, [items])
+  }, [items, concurrency])
 
-  // ── persistence (save on status/result changes, guarded) ─────────────────
+  // ── persistence ─────────────────────────────────────────────────────────
   const saveSig = items.map((i) => `${i.id}:${i.status}:${i.result?.filepath ?? ''}`).join('|')
   useEffect(() => {
     if (!loadedRef.current) return
@@ -77,14 +110,16 @@ export default function App(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saveSig])
 
-  // Escape closes the probe panel.
+  // Escape closes the settings modal, then the probe panel.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && probe) closeProbe()
+      if (e.key !== 'Escape') return
+      if (settingsOpen) setSettingsOpen(false)
+      else if (probe) closeProbe()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [probe])
+  }, [probe, settingsOpen])
 
   async function runDownload(item: QueueItem): Promise<void> {
     const req: DownloadRequest = {
@@ -134,6 +169,15 @@ export default function App(): JSX.Element {
     setProbing(true)
     setProbeErr('')
     setProbe(null)
+    setPlaylist(null)
+    if (looksLikePlaylist(target)) {
+      window.api
+        .probePlaylist(target)
+        .then((pl) => {
+          if (token === probeTokenRef.current) setPlaylist(pl)
+        })
+        .catch(() => {})
+    }
     try {
       const r = await window.api.probe(target)
       if (token === probeTokenRef.current) setProbe(r)
@@ -142,6 +186,12 @@ export default function App(): JSX.Element {
     } finally {
       if (token === probeTokenRef.current) setProbing(false)
     }
+  }
+
+  function cancelProbe(): void {
+    probeTokenRef.current++ // ignore the in-flight result
+    window.api.cancelProbe()
+    setProbing(false)
   }
 
   async function pasteAndProbe(): Promise<void> {
@@ -158,7 +208,7 @@ export default function App(): JSX.Element {
     }
   }
 
-  function onDrop(e: React.DragEvent): void {
+  function onDrop(e: DragEvent): void {
     e.preventDefault()
     setDragOver(false)
     const raw = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain')
@@ -174,43 +224,64 @@ export default function App(): JSX.Element {
 
   function closeProbe(): void {
     setProbe(null)
+    setPlaylist(null)
     setUrl('')
   }
 
   // ── queue actions ─────────────────────────────────────────────────────────
-  function addToQueue(opt: QualityOption, subtitle: SubtitleChoice | null): void {
-    if (!probe) return
-    const sig = `${probe.webpageUrl}|${opt.format}|${opt.audioFormat ?? ''}|${subtitle?.lang ?? ''}|${subtitle?.embed ?? ''}`
-    const dupe = itemsRef.current.some(
-      (i) =>
-        !TERMINAL.includes(i.status) &&
-        `${i.url}|${i.format}|${i.audioFormat ?? ''}|${i.subtitle?.lang ?? ''}|${i.subtitle?.embed ?? ''}` === sig
-    )
-    if (dupe) return
-    const item: QueueItem = {
+  function newItem(
+    src: { url: string; title: string; thumbnail: string | null; id: string },
+    opt: QualityOption,
+    subtitle: SubtitleChoice | null
+  ): QueueItem {
+    return {
       id: crypto.randomUUID(),
-      url: probe.webpageUrl,
-      title: probe.title,
-      thumbnail: probe.thumbnail,
+      url: src.url,
+      title: src.title,
+      thumbnail: src.thumbnail,
       qualityLabel: opt.label,
       format: opt.format,
       audioOnly: opt.audioOnly,
       audioFormat: opt.audioFormat,
       mergeFormat: opt.mergeFormat,
-      expectedId: probe.id,
+      expectedId: src.id,
       subtitle: subtitle ?? undefined,
       status: 'queued',
       progress: null,
       result: null
     }
+  }
+
+  function dupeKey(i: { url: string; format: string; audioFormat?: string; subtitle?: SubtitleChoice }): string {
+    return `${i.url}|${i.format}|${i.audioFormat ?? ''}|${i.subtitle?.lang ?? ''}|${i.subtitle?.embed ?? ''}`
+  }
+
+  function addToQueue(opt: QualityOption, subtitle: SubtitleChoice | null): void {
+    if (!probe) return
+    const item = newItem(
+      { url: probe.webpageUrl, title: probe.title, thumbnail: probe.thumbnail, id: probe.id },
+      opt,
+      subtitle
+    )
+    const active = new Set(itemsRef.current.filter((i) => !TERMINAL.includes(i.status)).map(dupeKey))
+    if (active.has(dupeKey(item))) return
     setItems((prev) => [item, ...prev])
+  }
+
+  function addPlaylistToQueue(opt: QualityOption, subtitle: SubtitleChoice | null): void {
+    if (!playlist) return
+    const active = new Set(itemsRef.current.filter((i) => !TERMINAL.includes(i.status)).map(dupeKey))
+    const fresh = playlist.entries
+      .map((e) => newItem({ url: e.url, title: e.title, thumbnail: null, id: e.id }, opt, subtitle))
+      .filter((i) => !active.has(dupeKey(i)))
+    if (fresh.length) setItems((prev) => [...fresh, ...prev])
+    closeProbe()
   }
 
   function pauseItem(id: string): void {
     window.api.pause(id)
   }
   function resumeItem(id: string): void {
-    // Re-queue; the scheduler restarts it and yt-dlp continues the .part file.
     startedRef.current.delete(id)
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'queued', progress: null, result: null } : i)))
   }
@@ -219,6 +290,12 @@ export default function App(): JSX.Element {
   }
   function resumeAll(): void {
     itemsRef.current.filter((i) => i.status === 'paused').forEach((i) => resumeItem(i.id))
+  }
+  function startNow(id: string): void {
+    setItems((prev) => {
+      const it = prev.find((i) => i.id === id)
+      return it ? [it, ...prev.filter((i) => i.id !== id)] : prev
+    })
   }
   function removeItem(id: string): void {
     const it = itemsRef.current.find((i) => i.id === id)
@@ -246,6 +323,19 @@ export default function App(): JSX.Element {
   async function updateAndRetry(id: string): Promise<void> {
     await updateEngine()
     retryItem(id)
+  }
+
+  // ── settings ──────────────────────────────────────────────────────────────
+  function updateSettings(patch: Partial<AppSettings>): void {
+    setSettings((s) => ({ ...s, ...patch }))
+    window.api.setSettings(patch)
+  }
+  function changeConcurrency(n: number): void {
+    setConcurrencyValue(n)
+    localStorage.setItem(CONCURRENCY_KEY, String(n))
+  }
+  function openFolder(): void {
+    window.api.openPath(outputDir)
   }
   async function changeFolder(): Promise<void> {
     const d = await window.api.pickFolder()
@@ -283,13 +373,16 @@ export default function App(): JSX.Element {
             <span>Téléchargeur vidéo &amp; audio</span>
           </div>
         </div>
+        <button className="icon-btn header-btn" title="Réglages" aria-label="Réglages" onClick={() => setSettingsOpen(true)}>
+          <IconSettings size={19} />
+        </button>
       </header>
 
       <div className="add-bar">
         <div className="add-input">
           <IconSearch size={18} className="add-icon" />
           <input
-            placeholder="Colle un lien vidéo (YouTube, Vimeo…)"
+            placeholder="Colle un lien vidéo ou une playlist (YouTube, Vimeo…)"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && doProbe()}
@@ -300,9 +393,15 @@ export default function App(): JSX.Element {
             <IconClipboard size={16} />
           </button>
         </div>
-        <button className="btn-primary" onClick={() => doProbe()} disabled={probing || !url.trim()}>
-          {probing ? 'Analyse…' : 'Analyser'}
-        </button>
+        {probing ? (
+          <button className="btn-ghost btn-tall" onClick={cancelProbe}>
+            Annuler
+          </button>
+        ) : (
+          <button className="btn-primary" onClick={() => doProbe()} disabled={!url.trim()}>
+            Analyser
+          </button>
+        )}
       </div>
 
       {probeErr && (
@@ -311,7 +410,16 @@ export default function App(): JSX.Element {
         </div>
       )}
 
-      {probe && <ProbePanel key={probe.webpageUrl} probe={probe} onDownload={addToQueue} onClose={closeProbe} />}
+      {probe && (
+        <ProbePanel
+          key={probe.webpageUrl}
+          probe={probe}
+          playlist={playlist}
+          onDownload={addToQueue}
+          onDownloadAll={addPlaylistToQueue}
+          onClose={closeProbe}
+        />
+      )}
 
       <div className="list-head">
         <h2>
@@ -355,6 +463,7 @@ export default function App(): JSX.Element {
               onRemove={removeItem}
               onReveal={(p) => window.api.reveal(p)}
               onOpen={(p) => window.api.openPath(p)}
+              onStartNow={startNow}
               onUpdateAndRetry={updateAndRetry}
             />
           ))
@@ -364,7 +473,7 @@ export default function App(): JSX.Element {
       <footer className="status-bar">
         <button
           className="folder-pill"
-          onClick={() => window.api.openPath(outputDir)}
+          onClick={openFolder}
           aria-label={`Ouvrir le dossier de sortie : ${outputDir}`}
           title={outputDir}
         >
@@ -387,6 +496,19 @@ export default function App(): JSX.Element {
           </button>
         </div>
       </footer>
+
+      {settingsOpen && (
+        <SettingsModal
+          settings={settings}
+          concurrency={concurrency}
+          outputDir={outputDir}
+          onChange={updateSettings}
+          onConcurrency={changeConcurrency}
+          onChangeFolder={changeFolder}
+          onOpenFolder={openFolder}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { ProbeResult } from '../../shared/types'
+import type { ProbeResult, PlaylistInfo } from '../../shared/types'
 import {
   qualityOptions,
   subtitleLangs,
@@ -10,16 +10,19 @@ import {
   type SubtitleChoice
 } from './lib'
 
+import { IconDownload, IconLock, IconVideo, IconMusic, IconX, IconCaptions, IconCheck, IconPlaylist } from './icons'
+
 const LAST_QUALITY_KEY = 'dowtubes.lastQuality'
-import { IconDownload, IconLock, IconVideo, IconMusic, IconX, IconCaptions, IconCheck } from './icons'
 
 interface Props {
   probe: ProbeResult
+  playlist: PlaylistInfo | null
   onDownload: (opt: QualityOption, subtitle: SubtitleChoice | null) => void
+  onDownloadAll: (opt: QualityOption, subtitle: SubtitleChoice | null) => void
   onClose: () => void
 }
 
-export default function ProbePanel({ probe, onDownload, onClose }: Props): JSX.Element {
+export default function ProbePanel({ probe, playlist, onDownload, onDownloadAll, onClose }: Props): JSX.Element {
   const options = useMemo(() => qualityOptions(probe), [probe])
   const video = options.filter((o) => o.kind === 'video')
   const audio = options.filter((o) => o.kind === 'audio')
@@ -40,15 +43,21 @@ export default function ProbePanel({ probe, onDownload, onClose }: Props): JSX.E
   const isVideo = chosen?.kind === 'video'
   const canSub = isVideo && subs.length > 0
 
+  function buildSubtitle(): SubtitleChoice | null {
+    return canSub && subOn && subLang
+      ? { lang: subLang, auto: subs.find((s) => s.code === subLang)?.auto ?? false, embed: subEmbed }
+      : null
+  }
   function handleDownload(): void {
     if (!chosen) return
-    const subtitle: SubtitleChoice | null =
-      canSub && subOn && subLang
-        ? { lang: subLang, auto: subs.find((s) => s.code === subLang)?.auto ?? false, embed: subEmbed }
-        : null
-    onDownload(chosen, subtitle)
+    onDownload(chosen, buildSubtitle())
     localStorage.setItem(LAST_QUALITY_KEY, chosen.label)
     setAddedCount((c) => c + 1)
+  }
+  function handleDownloadAll(): void {
+    if (!chosen || !playlist) return
+    onDownloadAll(chosen, buildSubtitle())
+    localStorage.setItem(LAST_QUALITY_KEY, chosen.label)
   }
 
   return (
@@ -149,9 +158,23 @@ export default function ProbePanel({ probe, onDownload, onClose }: Props): JSX.E
             </div>
           )}
 
+          {playlist && (
+            <div className="playlist-banner">
+              <IconPlaylist size={17} />
+              <span>
+                Playlist : <b>{playlist.count}</b> vidéos
+                {playlist.count > playlist.entries.length ? ` (les ${playlist.entries.length} premières)` : ''}
+              </span>
+              <button className="btn-ghost" onClick={handleDownloadAll}>
+                Tout télécharger ({playlist.entries.length})
+              </button>
+            </div>
+          )}
+
           <button className="btn-primary probe-dl" onClick={handleDownload}>
             <IconDownload size={17} />
-            Télécharger en {chosen?.label}
+            {playlist ? 'Télécharger cette vidéo en ' : 'Télécharger en '}
+            {chosen?.label}
           </button>
 
           {addedCount > 0 && (

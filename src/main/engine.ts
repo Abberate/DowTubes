@@ -11,9 +11,11 @@ import type {
   DownloadRequest,
   DownloadResult,
   ProgressEvent,
-  DownloadErrorKind
+  DownloadErrorKind,
+  PlaylistInfo
 } from '../shared/types'
 import { ytDlpArgs, ffmpegPath, engineEnv, userBinDir } from './binaries'
+import { getSettings } from './settings'
 
 const execFileP = promisify(execFile)
 
@@ -21,18 +23,21 @@ const execFileP = promisify(execFile)
 const running = new Map<string, ChildProcess>()
 const canceled = new Set<string>()
 const paused = new Set<string>()
+let probeAbort: AbortController | null = null
 
 // ── Probe ───────────────────────────────────────────────────────────────────
 
 /** Resolve a URL to a typed info_dict via `yt-dlp -J`. Throws on failure. */
 export async function probe(url: string): Promise<ProbeResult> {
   const { cmd, args } = ytDlpArgs(['-J', '--no-warnings', '--no-playlist', url])
+  probeAbort = new AbortController()
   let stdout: string
   try {
     const res = await execFileP(cmd, args, {
       timeout: 90_000,
       maxBuffer: 64 * 1024 * 1024,
-      env: engineEnv()
+      env: engineEnv(),
+      signal: probeAbort.signal
     })
     stdout = res.stdout
   } catch (e) {
@@ -84,6 +89,43 @@ export async function probe(url: string): Promise<ProbeResult> {
     formats,
     subtitleLangs: Object.keys((info.subtitles as object) ?? {}),
     autoCaptionLangs: Object.keys((info.automatic_captions as object) ?? {})
+  }
+}
+
+/** Abort an in-flight probe (the renderer ignores the resulting rejection). */
+export function cancelProbe(): void {
+  probeAbort?.abort()
+}
+
+/** Detect a playlist/channel and return a flat list of its videos (up to 100). Null if not a playlist. */
+export async function probePlaylist(url: string): Promise<PlaylistInfo | null> {
+  const { cmd, args } = ytDlpArgs(['--flat-playlist', '-J', '--playlist-end', '100', '--no-warnings', url])
+  let stdout: string
+  try {
+    const res = await execFileP(cmd, args, { timeout: 60_000, maxBuffer: 64 * 1024 * 1024, env: engineEnv() })
+    stdout = res.stdout
+  } catch {
+    return null
+  }
+  let info: Record<string, unknown>
+  try {
+    info = JSON.parse(stdout)
+  } catch {
+    return null
+  }
+  if (info._type !== 'playlist' || !Array.isArray(info.entries)) return null
+  const entries = (info.entries as Record<string, unknown>[])
+    .filter((e) => e && e.id)
+    .map((e) => ({
+      id: String(e.id),
+      title: (e.title as string) || (e.url as string) || String(e.id),
+      url: (e.url as string) || `https://www.youtube.com/watch?v=${e.id}`
+    }))
+  if (entries.length < 2) return null
+  return {
+    title: (info.title as string) || 'Playlist',
+    count: (info.playlist_count as number) ?? entries.length,
+    entries
   }
 }
 
@@ -197,7 +239,7 @@ export function killAll(): void {
 
 function notifyDone(title: string | undefined, filepath: string | null): void {
   try {
-    if (!Notification.isSupported()) return
+    if (!getSettings().notify || !Notification.isSupported()) return
     const n = new Notification({ title: 'Téléchargement terminé', body: title ?? 'Fichier prêt' })
     if (filepath) n.on('click', () => shell.showItemInFolder(filepath))
     n.show()
@@ -258,8 +300,9 @@ function buildArgs(req: DownloadRequest): string[] {
 
   // Metadata is safe (ffmpeg). Cover art only for MP3 (ffmpeg handles it; m4a/mp4
   // would need AtomicParsley/mutagen we don't bundle yet).
-  args.push('--embed-metadata')
-  if (req.audioOnly && (req.audioFormat ?? 'mp3') === 'mp3') args.push('--embed-thumbnail')
+  const s = getSettings()
+  if (s.embedMetadata) args.push('--embed-metadata')
+  if (s.embedThumbnail && req.audioOnly && (req.audioFormat ?? 'mp3') === 'mp3') args.push('--embed-thumbnail')
 
   args.push(
     '--ffmpeg-location', ffmpegPath(),

@@ -12,7 +12,8 @@ import {
   IconRetry,
   IconTrash,
   IconCaptions,
-  IconRefresh
+  IconRefresh,
+  IconArrowUp
 } from './icons'
 
 interface Props {
@@ -23,6 +24,7 @@ interface Props {
   onRemove: (id: string) => void
   onReveal: (path: string) => void
   onOpen: (path: string) => void
+  onStartNow: (id: string) => void
   onUpdateAndRetry: (id: string) => void
 }
 
@@ -34,6 +36,7 @@ export default function DownloadCard({
   onRemove,
   onReveal,
   onOpen,
+  onStartNow,
   onUpdateAndRetry
 }: Props): JSX.Element {
   const [imgFailed, setImgFailed] = useState(false)
@@ -89,6 +92,11 @@ export default function DownloadCard({
       </div>
 
       <div className="dl-actions">
+        {item.status === 'queued' && (
+          <button className="icon-btn" title="Démarrer maintenant" aria-label="Démarrer maintenant" onClick={() => onStartNow(item.id)}>
+            <IconArrowUp size={16} />
+          </button>
+        )}
         {item.status === 'downloading' && (
           <button className="icon-btn" title="Pause" aria-label="Mettre en pause" onClick={() => onPause(item.id)}>
             <IconPause size={16} />

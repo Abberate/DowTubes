@@ -42,6 +42,20 @@ export interface ProbeResult {
   autoCaptionLangs: string[]
 }
 
+/** A playlist/channel detected during probe. */
+export interface PlaylistInfo {
+  title: string
+  count: number
+  entries: { id: string; title: string; url: string }[]
+}
+
+/** App-wide settings persisted in userData/settings.json. */
+export interface AppSettings {
+  notify: boolean
+  embedMetadata: boolean
+  embedThumbnail: boolean
+}
+
 export type DownloadPhase = 'downloading' | 'postprocessing' | 'done' | 'error' | 'canceled' | 'paused'
 
 /** Streamed to the renderer as a download progresses. */
