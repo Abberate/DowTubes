@@ -1,19 +1,26 @@
-# Packaging config — used in Phase 6 (macOS DMG + Windows NSIS via CI).
-# Present now as a placeholder so binary-bundling intent is documented from Phase 0.
 appId: com.dowtubes.app
 productName: DowTubes
 directories:
   buildResources: build
+  output: dist
+# Ad-hoc sign the macOS app (unsigned apps are killed on Apple Silicon).
+afterPack: ./scripts/afterpack.cjs
 files:
-  - out/**
-  - package.json
+  - "!**/.vscode/*"
+  - "!src/*"
+  - "!scripts/*"
+  - "!build/*"
+  - "!electron.vite.config.{js,ts,mjs,cjs}"
+  - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
+  - "!{.gitignore,dev.log,electron-builder.yml}"
+  - "!*.md"
 # ffmpeg/ffprobe must exist as real files on disk (asar can't exec) -> unpack them.
 asarUnpack:
   - "**/node_modules/ffmpeg-static/**"
   - "**/node_modules/ffprobe-static/**"
-# Ship the yt-dlp zipapp + standalone Python as real files next to the app.
+# Ship the yt-dlp zipapp + standalone Python + icon as real files next to the app.
 # The zipapp is seeded then copied to userData/bin on first run and self-updates
-# THERE, never inside the signed bundle.
+# THERE, never inside the (eventually signed) bundle.
 extraResources:
   - from: resources/engine
     to: engine
@@ -21,11 +28,21 @@ extraResources:
   - from: resources/python
     to: python
     filter: ["**/*"]
+  - from: resources/icon.png
+    to: icon.png
 mac:
-  target: dmg
+  target:
+    - target: dmg
+      arch: arm64
   category: public.app-category.utilities
   icon: build/icon.icns
-  # Unsigned for now (internal sharing). Phase 6 adds Developer ID + notarization.
+  # Unsigned for internal sharing (right-click → Open on other Macs). Phase 6b adds
+  # Developer ID + notarization.
+  identity: null
 win:
   target: nsis
   icon: build/icon.png
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true

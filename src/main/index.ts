@@ -4,8 +4,15 @@ import { registerIpc } from './ipc'
 import { killAll } from './engine'
 import { buildMenu } from './menu'
 
+// Resilience: a stray async error in the main process must not silently kill the
+// whole app (it did when packaged) — log and keep running.
+process.on('uncaughtException', (e) => console.error('[main] uncaughtException:', e))
+process.on('unhandledRejection', (e) => console.error('[main] unhandledRejection:', e))
+
 function iconPath(): string {
-  return join(app.isPackaged ? process.resourcesPath : app.getAppPath(), 'resources', 'icon.png')
+  return app.isPackaged
+    ? join(process.resourcesPath, 'icon.png')
+    : join(app.getAppPath(), 'resources', 'icon.png')
 }
 
 function createWindow(): void {
