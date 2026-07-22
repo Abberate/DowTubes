@@ -3,7 +3,10 @@ productName: DowTubes
 directories:
   buildResources: build
   output: dist
-# Ad-hoc sign the macOS app (unsigned apps are killed on Apple Silicon).
+# afterPack flips Electron fuses (disable RunAsNode — otherwise ELECTRON_RUN_AS_NODE
+# in the environment makes the packaged app run as a plain Node script and exit)
+# THEN ad-hoc signs (unsigned apps are killed on Apple Silicon). Order matters:
+# electron-builder's own electronFuses would flip AFTER signing and break it.
 afterPack: ./scripts/afterpack.cjs
 files:
   - "!**/.vscode/*"
