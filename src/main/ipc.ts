@@ -6,7 +6,7 @@ import { promisify } from 'node:util'
 import type { VersionInfo, DownloadRequest } from '../shared/types'
 import { ytDlpArgs, ffmpegPath, engineEnv } from './binaries'
 import { probe, probePlaylist, cancelProbe, download, cancel, pause, updateEngine } from './engine'
-import { loadQueue, saveQueue, saveRecord, removeRecord, listRecords, scanOrphanParts } from './store'
+import { loadQueue, saveQueue, saveRecord, removeRecord, listRecords, scanFolder, listDismissed, addDismissed } from './store'
 import { getSettings, setSettings } from './settings'
 import type { AppSettings } from '../shared/types'
 
@@ -89,5 +89,7 @@ export function registerIpc(): void {
   ipcMain.handle('recovery:save', (_e, item: { id: string }) => saveRecord(item))
   ipcMain.handle('recovery:remove', (_e, id: string) => removeRecord(id))
   ipcMain.handle('recovery:list', () => listRecords())
-  ipcMain.handle('recovery:orphans', (_e, dir: string) => scanOrphanParts(dir))
+  ipcMain.handle('folder:scan', (_e, dir: string) => scanFolder(dir))
+  ipcMain.handle('folder:dismissed', () => listDismissed())
+  ipcMain.handle('folder:dismiss', (_e, key: string) => addDismissed(key))
 }

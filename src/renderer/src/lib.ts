@@ -15,6 +15,8 @@ export interface QueueItem {
   mergeFormat?: 'mp4' | 'mkv'
   expectedId?: string
   subtitle?: SubtitleChoice
+  /** Set for items reconstructed by scanning the download folder (dismiss key). */
+  fileKey?: string
   status: ItemStatus
   progress: ProgressEvent | null
   result: DownloadResult | null

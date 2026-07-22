@@ -28,6 +28,7 @@ interface Props {
   onOpen: (path: string) => void
   onStartNow: (id: string) => void
   onUpdateAndRetry: (id: string) => void
+  onResumeInterrupted: (item: QueueItem) => void
   onVariant: (item: QueueItem, opt: QualityOption) => void
   onReprobe: (url: string) => void
   dragging: boolean
@@ -46,6 +47,7 @@ export default function DownloadCard({
   onOpen,
   onStartNow,
   onUpdateAndRetry,
+  onResumeInterrupted,
   onVariant,
   onReprobe,
   dragging,
@@ -67,7 +69,10 @@ export default function DownloadCard({
   const active = item.status === 'downloading' || item.status === 'postprocessing'
   const pct = item.progress?.percent ?? null
   const done = item.status === 'done' && !!item.result?.filepath
-  const canRetry = (item.status === 'error' && item.result?.errorKind !== 'drm') || item.status === 'canceled'
+  // An item reconstructed from a leftover .part file: interrupted, no URL yet.
+  const interrupted = item.status === 'error' && !item.url
+  const canRetry =
+    (item.status === 'error' && !!item.url && item.result?.errorKind !== 'drm') || item.status === 'canceled'
   const showThumb = item.thumbnail && !imgFailed
 
   return (
@@ -153,10 +158,17 @@ export default function DownloadCard({
             <button className="icon-btn" title="Afficher dans le Finder" aria-label="Afficher dans le Finder" onClick={() => onReveal(item.result!.filepath!)}>
               <IconFolder size={16} />
             </button>
-            <button ref={moreRef} className="icon-btn" title="Plus d'options" aria-label="Plus d'options" onClick={toggleMenu}>
-              <IconMore size={16} />
-            </button>
+            {item.url && (
+              <button ref={moreRef} className="icon-btn" title="Plus d'options" aria-label="Plus d'options" onClick={toggleMenu}>
+                <IconMore size={16} />
+              </button>
+            )}
           </>
+        )}
+        {interrupted && (
+          <button className="btn-resume" title="Coller le lien et reprendre" onClick={() => onResumeInterrupted(item)}>
+            <IconPlay size={14} /> Reprendre
+          </button>
         )}
         {canRetry && (
           <button className="icon-btn" title="Relancer" aria-label="Relancer" onClick={() => onRetry(item.id)}>
@@ -230,6 +242,15 @@ function StatusLine({ item, onUpdateAndRetry }: { item: QueueItem; onUpdateAndRe
     case 'canceled':
       return <span className="muted">Annulé</span>
     case 'error': {
+      // Reconstructed interrupted download (no URL): show its "Interrompu · … déjà
+      // téléchargés" note calmly — it's resumable, not a failure.
+      if (!item.url) {
+        return (
+          <span className="muted">
+            <IconAlert size={13} /> {item.result?.error ?? 'Interrompu — à reprendre'}
+          </span>
+        )
+      }
       const kind = item.result?.errorKind
       const label =
         kind === 'network'

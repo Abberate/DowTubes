@@ -56,11 +56,10 @@ export interface AppSettings {
   embedThumbnail: boolean
 }
 
-/** A leftover partial download file found in the output folder. */
-export interface OrphanPart {
-  title: string
-  file: string
-  size: number
+/** Result of scanning the download folder to reconstruct the list. */
+export interface FolderScan {
+  done: { title: string; path: string; ext: string; size: number; audio: boolean }[]
+  partial: { title: string; file: string; size: number; formatCode: string }[]
 }
 
 export type DownloadPhase = 'downloading' | 'postprocessing' | 'done' | 'error' | 'canceled' | 'paused'

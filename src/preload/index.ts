@@ -7,7 +7,7 @@ import type {
   ProgressEvent,
   PlaylistInfo,
   AppSettings,
-  OrphanPart
+  FolderScan
 } from '../shared/types'
 
 // The ONLY surface the sandboxed renderer can reach. No raw ipcRenderer, fs, or
@@ -32,7 +32,9 @@ const api = {
   recSave: (item: unknown): Promise<void> => ipcRenderer.invoke('recovery:save', item),
   recRemove: (id: string): Promise<void> => ipcRenderer.invoke('recovery:remove', id),
   recList: (): Promise<unknown[]> => ipcRenderer.invoke('recovery:list'),
-  recOrphans: (dir: string): Promise<OrphanPart[]> => ipcRenderer.invoke('recovery:orphans', dir),
+  folderScan: (dir: string): Promise<FolderScan> => ipcRenderer.invoke('folder:scan', dir),
+  folderDismissed: (): Promise<string[]> => ipcRenderer.invoke('folder:dismissed'),
+  folderDismiss: (key: string): Promise<void> => ipcRenderer.invoke('folder:dismiss', key),
   onOpenSettings: (cb: () => void): (() => void) => {
     const listener = (): void => cb()
     ipcRenderer.on('menu:openSettings', listener)

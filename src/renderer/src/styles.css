@@ -177,6 +177,25 @@ body {
   background: var(--accent-soft);
   color: var(--accent-text);
 }
+.btn-resume {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s;
+}
+.btn-resume:hover {
+  background: var(--accent-hover);
+}
 .link-btn {
   display: inline-flex;
   align-items: center;

@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, readdirSync, unlinkSync, statSync } from 'node:fs'
 import { join, dirname } from 'node:path'
+import type { FolderScan } from '../shared/types'
 
 // Persist the download list as JSON in userData. A native SQLite module would
 // need an Electron-ABI rebuild (electron-rebuild) — overkill for a download list.
@@ -78,14 +79,49 @@ export function listRecords(): unknown[] {
   }
 }
 
-/** Scan a download folder for leftover partial files (interrupted downloads). */
-export function scanOrphanParts(dir: string): { title: string; file: string; size: number }[] {
+const MEDIA_RE = /\.(mp4|mkv|webm|m4a|mp3|opus|aac|flac|mov|avi|wav)$/i
+const AUDIO_RE = /\.(m4a|mp3|opus|aac|flac|wav)$/i
+
+/** Scan a download folder: completed media files + leftover partial downloads. */
+export function scanFolder(dir: string): FolderScan {
+  const done: FolderScan['done'] = []
+  const partial: FolderScan['partial'] = []
   try {
-    return readdirSync(dir)
-      .filter((f) => f.endsWith('.part'))
-      .map((f) => ({ title: cleanPartTitle(f), file: f, size: safeSize(join(dir, f)) }))
+    for (const f of readdirSync(dir)) {
+      const full = join(dir, f)
+      if (f.endsWith('.part')) {
+        const m = f.match(/\.f?(\d+)\.[a-z0-9]+\.part$/i)
+        partial.push({ title: cleanPartTitle(f), file: f, size: safeSize(full), formatCode: m ? m[1] : '' })
+      } else if (MEDIA_RE.test(f)) {
+        const ext = (f.match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toLowerCase()
+        done.push({ title: f.replace(/\.[a-z0-9]+$/i, ''), path: full, ext, size: safeSize(full), audio: AUDIO_RE.test(f) })
+      }
+    }
+  } catch {
+    /* dir missing */
+  }
+  return { done, partial }
+}
+
+// Keys the user has removed from the reconstructed list, so they don't reappear.
+function dismissedFile(): string {
+  return join(app.getPath('userData'), 'dismissed.json')
+}
+export function listDismissed(): string[] {
+  try {
+    const d = JSON.parse(readFileSync(dismissedFile(), 'utf8'))
+    return Array.isArray(d) ? d : []
   } catch {
     return []
+  }
+}
+export function addDismissed(key: string): void {
+  try {
+    const set = new Set(listDismissed())
+    set.add(key)
+    writeFileSync(dismissedFile(), JSON.stringify([...set]))
+  } catch {
+    /* best-effort */
   }
 }
 

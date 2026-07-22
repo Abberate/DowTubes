@@ -5,8 +5,7 @@ import type {
   DownloadRequest,
   DownloadResult,
   PlaylistInfo,
-  AppSettings,
-  OrphanPart
+  AppSettings
 } from '../../shared/types'
 import type { QueueItem, ItemStatus, QualityOption, SubtitleChoice } from './lib'
 import { errMsg, fmtBytes } from './lib'
@@ -21,8 +20,7 @@ import {
   IconRefresh,
   IconAlert,
   IconClipboard,
-  IconSettings,
-  IconX
+  IconSettings
 } from './icons'
 
 const TERMINAL: ItemStatus[] = ['done', 'error', 'canceled']
@@ -31,6 +29,11 @@ const DEFAULT_SETTINGS: AppSettings = { notify: true, embedMetadata: true, embed
 
 function looksLikePlaylist(u: string): boolean {
   return /[?&]list=|\/playlist|\/@|\/channel\/|\/c\/|\/user\//i.test(u)
+}
+
+/** Normalized title fragment for loose dedup between queue items and folder files. */
+function norm(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 18)
 }
 
 export default function App(): JSX.Element {
@@ -53,7 +56,6 @@ export default function App(): JSX.Element {
 
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-  const [orphans, setOrphans] = useState<OrphanPart[]>([])
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const itemsRef = useRef<QueueItem[]>([])
@@ -66,27 +68,78 @@ export default function App(): JSX.Element {
 
   // ── init ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    window.api.defaultOutputDir().then((d) => {
-      setOutputDir(d)
-      outputDirRef.current = d
-      window.api.recOrphans(d).then(setOrphans)
-    })
     window.api.getVersions().then(setVersions)
     window.api.getSettings().then(setSettings)
-    // Merge the queue with per-download recovery records: interrupted downloads
-    // survive even if queue.json was lost, and auto-resume (they carry the URL).
-    Promise.all([window.api.loadQueue(), window.api.recList()]).then(([saved, records]) => {
-      const items = saved as QueueItem[]
-      const seen = new Set(items.map((i) => i.id))
-      const recovered = (records as QueueItem[]).filter((r) => r && r.id && !seen.has(r.id))
-      const restored = [...items, ...recovered].map((i) =>
+    // Load the queue + recovery records, then reconstruct from the download folder:
+    // completed files show as "done", interrupted .part files come back as resumable
+    // "error" items — so the list is never empty after a lost/wiped queue.
+    void (async () => {
+      const d = await window.api.defaultOutputDir()
+      setOutputDir(d)
+      outputDirRef.current = d
+      const [saved, records, scan, dismissed] = await Promise.all([
+        window.api.loadQueue(),
+        window.api.recList(),
+        window.api.folderScan(d),
+        window.api.folderDismissed()
+      ])
+      const base = saved as QueueItem[]
+      const byId = new Set(base.map((i) => i.id))
+      const recovered = (records as QueueItem[]).filter((r) => r && r.id && !byId.has(r.id))
+      const list = [...base, ...recovered]
+      const dis = new Set(dismissed)
+      const havePath = new Set(list.map((i) => i.result?.filepath).filter(Boolean) as string[])
+      const haveTitle = new Set(list.map((i) => norm(i.title)))
+
+      const doneItems: QueueItem[] = scan.done
+        .filter((f) => !dis.has(`f:${f.path}`) && !havePath.has(f.path))
+        .map((f) => ({
+          id: crypto.randomUUID(),
+          url: '',
+          title: f.title,
+          thumbnail: null,
+          qualityLabel: f.ext.toUpperCase(),
+          format: '',
+          audioOnly: f.audio,
+          expectedId: '',
+          fileKey: `f:${f.path}`,
+          status: 'done' as ItemStatus,
+          progress: null,
+          result: { id: '', ok: true, filepath: f.path, error: null }
+        }))
+
+      const partItems: QueueItem[] = scan.partial
+        .filter((p) => !dis.has(`p:${p.file}`) && !haveTitle.has(norm(p.title)))
+        .map((p) => ({
+          id: crypto.randomUUID(),
+          url: '',
+          title: p.title,
+          thumbnail: null,
+          qualityLabel: 'Interrompu',
+          format: p.formatCode ? `${p.formatCode}+ba/b` : 'bv*+ba/b',
+          audioOnly: false,
+          mergeFormat: 'mp4' as const,
+          expectedId: '',
+          fileKey: `p:${p.file}`,
+          status: 'error' as ItemStatus,
+          progress: null,
+          result: {
+            id: '',
+            ok: false,
+            filepath: null,
+            error: `Interrompu · ${fmtBytes(p.size)} déjà téléchargés`,
+            errorKind: 'unknown' as const
+          }
+        }))
+
+      const merged = [...list, ...partItems, ...doneItems].map((i) =>
         i.status === 'downloading' || i.status === 'postprocessing' || i.status === 'queued'
           ? { ...i, status: 'queued' as ItemStatus, progress: null }
           : { ...i, progress: null }
       )
-      setItems(restored)
+      setItems(merged)
       loadedRef.current = true
-    })
+    })()
     const off = window.api.onProgress((ev) => {
       if (ev.phase !== 'downloading' && ev.phase !== 'postprocessing') return
       setItems((prev) =>
@@ -339,6 +392,26 @@ export default function App(): JSX.Element {
     startedRef.current.delete(id)
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'queued', progress: null, result: null } : i)))
   }
+  // Resume an interrupted item reconstructed from a .part file (it has no URL):
+  // take the link from the clipboard, then let yt-dlp continue the partial file.
+  async function resumeInterrupted(item: QueueItem): Promise<void> {
+    let url = ''
+    try {
+      const t = (await navigator.clipboard.readText()).trim()
+      if (/^https?:\/\//i.test(t)) url = t
+    } catch {
+      /* clipboard denied */
+    }
+    if (!url) {
+      showToast('Copie le lien de la vidéo, puis clique Reprendre')
+      return
+    }
+    startedRef.current.delete(item.id)
+    const resumed: QueueItem = { ...item, url, status: 'queued', result: null, progress: null }
+    setItems((prev) => prev.map((i) => (i.id === item.id ? resumed : i)))
+    window.api.recSave({ ...resumed, progress: null })
+    showToast('Reprise du téléchargement…')
+  }
   function pauseAll(): void {
     itemsRef.current.filter((i) => i.status === 'downloading').forEach((i) => window.api.pause(i.id))
   }
@@ -378,6 +451,7 @@ export default function App(): JSX.Element {
   function removeItem(id: string): void {
     const it = itemsRef.current.find((i) => i.id === id)
     if (it && (it.status === 'downloading' || it.status === 'postprocessing')) window.api.cancel(id)
+    if (it?.fileKey) window.api.folderDismiss(it.fileKey) // don't re-add it from the folder scan
     startedRef.current.delete(id)
     window.api.recRemove(id)
     setItems((prev) => prev.filter((i) => i.id !== id))
@@ -387,7 +461,13 @@ export default function App(): JSX.Element {
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'queued', progress: null, result: null } : i)))
   }
   function clearFinished(): void {
-    itemsRef.current.filter((i) => TERMINAL.includes(i.status)).forEach((i) => startedRef.current.delete(i.id))
+    itemsRef.current
+      .filter((i) => TERMINAL.includes(i.status))
+      .forEach((i) => {
+        startedRef.current.delete(i.id)
+        if (i.fileKey) window.api.folderDismiss(i.fileKey)
+        window.api.recRemove(i.id)
+      })
     setItems((prev) => prev.filter((i) => !TERMINAL.includes(i.status)))
   }
   async function updateEngine(): Promise<void> {
@@ -423,12 +503,6 @@ export default function App(): JSX.Element {
       outputDirRef.current = d
     }
   }
-
-  const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 18)
-  const visibleOrphans = orphans.filter((o) => {
-    const on = norm(o.title)
-    return on.length > 3 && !items.some((i) => norm(i.title).includes(on) || on.includes(norm(i.title)))
-  })
 
   const activeCount = items.filter((i) => i.status === 'downloading' || i.status === 'postprocessing').length
   const downloadingCount = items.filter((i) => i.status === 'downloading').length
@@ -506,38 +580,6 @@ export default function App(): JSX.Element {
         />
       )}
 
-      {visibleOrphans.length > 0 && (
-        <div className="recovery-banner">
-          <div className="rec-head">
-            <IconAlert size={16} />
-            <span>
-              <b>
-                {visibleOrphans.length} téléchargement{visibleOrphans.length > 1 ? 's' : ''} incomplet
-                {visibleOrphans.length > 1 ? 's' : ''}
-              </b>{' '}
-              trouvé{visibleOrphans.length > 1 ? 's' : ''} dans ton dossier
-            </span>
-            <button className="icon-btn" title="Ignorer" aria-label="Ignorer" onClick={() => setOrphans([])}>
-              <IconX size={14} />
-            </button>
-          </div>
-          <p className="rec-hint">
-            Recolle le lien de chaque vidéo <b>à la même qualité</b> pour reprendre là où ça s'est arrêté (les octets déjà téléchargés ne sont pas repris de zéro).
-          </p>
-          <ul className="rec-list">
-            {visibleOrphans.map((o) => (
-              <li key={o.file}>
-                <span className="rec-title" title={o.title}>{o.title}</span>
-                <span className="rec-size">{fmtBytes(o.size)}</span>
-              </li>
-            ))}
-          </ul>
-          <button className="btn-ghost" onClick={() => window.api.openPath(outputDir)}>
-            Ouvrir le dossier
-          </button>
-        </div>
-      )}
-
       <div className="list-head">
         <h2>
           Téléchargements {items.length > 0 && <span className="count">{items.length}</span>}
@@ -583,6 +625,7 @@ export default function App(): JSX.Element {
               onOpen={(p) => window.api.openPath(p)}
               onStartNow={startNow}
               onUpdateAndRetry={updateAndRetry}
+              onResumeInterrupted={resumeInterrupted}
               onVariant={addVariant}
               onReprobe={reprobe}
               dragging={it.id === draggingId}
