@@ -302,7 +302,8 @@ function buildArgs(req: DownloadRequest): string[] {
   // would need AtomicParsley/mutagen we don't bundle yet).
   const s = getSettings()
   if (s.embedMetadata) args.push('--embed-metadata')
-  if (s.embedThumbnail && req.audioOnly && (req.audioFormat ?? 'mp3') === 'mp3') args.push('--embed-thumbnail')
+  // Cover art for all audio: mp3 via ffmpeg, m4a via mutagen (bundled in the Python).
+  if (s.embedThumbnail && req.audioOnly) args.push('--embed-thumbnail')
 
   args.push(
     '--ffmpeg-location', ffmpegPath(),

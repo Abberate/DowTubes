@@ -49,11 +49,15 @@ export default function App(): JSX.Element {
     return v >= 1 && v <= 5 ? v : 3
   })
 
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+
   const itemsRef = useRef<QueueItem[]>([])
   const startedRef = useRef<Set<string>>(new Set())
   const outputDirRef = useRef('')
   const loadedRef = useRef(false)
   const probeTokenRef = useRef(0)
+  const dragIdRef = useRef<string | null>(null)
+  const internalDragRef = useRef(false)
 
   // ── init ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -297,6 +301,30 @@ export default function App(): JSX.Element {
       return it ? [it, ...prev.filter((i) => i.id !== id)] : prev
     })
   }
+  // Drag-to-reorder the queue.
+  function reorderStart(id: string): void {
+    dragIdRef.current = id
+    internalDragRef.current = true
+    setDraggingId(id)
+  }
+  function reorderOver(overId: string): void {
+    const dragId = dragIdRef.current
+    if (!dragId || dragId === overId) return
+    setItems((prev) => {
+      const from = prev.findIndex((i) => i.id === dragId)
+      const to = prev.findIndex((i) => i.id === overId)
+      if (from < 0 || to < 0 || from === to) return prev
+      const copy = [...prev]
+      const [moved] = copy.splice(from, 1)
+      copy.splice(to, 0, moved)
+      return copy
+    })
+  }
+  function reorderEnd(): void {
+    dragIdRef.current = null
+    internalDragRef.current = false
+    setDraggingId(null)
+  }
   function removeItem(id: string): void {
     const it = itemsRef.current.find((i) => i.id === id)
     if (it && (it.status === 'downloading' || it.status === 'postprocessing')) window.api.cancel(id)
@@ -356,7 +384,7 @@ export default function App(): JSX.Element {
       className={`app ${dragOver ? 'drag-over' : ''}`}
       onDragOver={(e) => {
         e.preventDefault()
-        setDragOver(true)
+        if (!internalDragRef.current) setDragOver(true)
       }}
       onDragLeave={(e) => {
         if (e.currentTarget === e.target) setDragOver(false)
@@ -466,6 +494,10 @@ export default function App(): JSX.Element {
               onOpen={(p) => window.api.openPath(p)}
               onStartNow={startNow}
               onUpdateAndRetry={updateAndRetry}
+              dragging={it.id === draggingId}
+              onReorderStart={reorderStart}
+              onReorderOver={reorderOver}
+              onReorderEnd={reorderEnd}
             />
           ))
         )}

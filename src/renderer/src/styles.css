@@ -770,6 +770,13 @@ input:focus-visible,
 }
 .dl-card {
   animation: cardIn 0.22s ease;
+  cursor: grab;
+}
+.dl-card:active {
+  cursor: grabbing;
+}
+.dl-card.dragging {
+  opacity: 0.5;
 }
 .dl-card.paused {
   opacity: 0.72;

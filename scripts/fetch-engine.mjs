@@ -84,6 +84,7 @@ async function fetchPython() {
   const pythonBin = join(resourcesDir, 'python', process.platform === 'win32' ? 'python.exe' : join('bin', 'python3'))
   if (existsSync(pythonBin)) {
     console.log('[engine] standalone Python present')
+    ensureMutagen(pythonBin)
     return
   }
   const triple = TRIPLE[`${process.platform}-${process.arch}`]
@@ -110,6 +111,21 @@ async function fetchPython() {
   execFileSync('tar', ['xzf', tmp, '-C', resourcesDir], { stdio: 'ignore' })
   rmSync(tmp, { force: true })
   console.log('[engine] standalone Python ready')
+  ensureMutagen(pythonBin)
+}
+
+/** yt-dlp uses mutagen to embed cover art into m4a/mp4 (no AtomicParsley needed). */
+function ensureMutagen(pybin) {
+  try {
+    execFileSync(pybin, ['-c', 'import mutagen'], { stdio: 'ignore' })
+  } catch {
+    try {
+      execFileSync(pybin, ['-m', 'pip', 'install', '--disable-pip-version-check', '-q', 'mutagen'], { stdio: 'ignore' })
+      console.log('[engine] mutagen installed (cover art for m4a/mp4)')
+    } catch {
+      console.warn('[engine] mutagen install failed — m4a/mp4 cover art disabled')
+    }
+  }
 }
 
 try {

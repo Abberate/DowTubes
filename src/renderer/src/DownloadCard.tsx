@@ -26,6 +26,10 @@ interface Props {
   onOpen: (path: string) => void
   onStartNow: (id: string) => void
   onUpdateAndRetry: (id: string) => void
+  dragging: boolean
+  onReorderStart: (id: string) => void
+  onReorderOver: (id: string) => void
+  onReorderEnd: () => void
 }
 
 export default function DownloadCard({
@@ -37,7 +41,11 @@ export default function DownloadCard({
   onReveal,
   onOpen,
   onStartNow,
-  onUpdateAndRetry
+  onUpdateAndRetry,
+  dragging,
+  onReorderStart,
+  onReorderOver,
+  onReorderEnd
 }: Props): JSX.Element {
   const [imgFailed, setImgFailed] = useState(false)
   const active = item.status === 'downloading' || item.status === 'postprocessing'
@@ -48,13 +56,27 @@ export default function DownloadCard({
 
   return (
     <div
-      className={`dl-card ${item.status}`}
+      className={`dl-card ${item.status} ${dragging ? 'dragging' : ''}`}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/x-dowtubes', item.id)
+        onReorderStart(item.id)
+      }}
+      onDragOver={(e) => e.preventDefault()}
+      onDragEnter={() => onReorderOver(item.id)}
+      onDragEnd={onReorderEnd}
+      onDrop={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onReorderEnd()
+      }}
       onDoubleClick={() => done && onOpen(item.result!.filepath!)}
       title={done ? 'Double-cliquer pour ouvrir' : undefined}
     >
       <div className="dl-thumb">
         {showThumb ? (
-          <img src={item.thumbnail!} alt="" onError={() => setImgFailed(true)} />
+          <img src={item.thumbnail!} alt="" draggable={false} onError={() => setImgFailed(true)} />
         ) : item.audioOnly ? (
           <IconMusic size={22} />
         ) : (
