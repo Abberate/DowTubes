@@ -6,7 +6,8 @@ import type {
   DownloadResult,
   ProgressEvent,
   PlaylistInfo,
-  AppSettings
+  AppSettings,
+  OrphanPart
 } from '../shared/types'
 
 // The ONLY surface the sandboxed renderer can reach. No raw ipcRenderer, fs, or
@@ -28,6 +29,10 @@ const api = {
   saveQueue: (items: unknown[]): Promise<void> => ipcRenderer.invoke('queue:save', items),
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
   setSettings: (patch: Partial<AppSettings>): Promise<AppSettings> => ipcRenderer.invoke('settings:set', patch),
+  recSave: (item: unknown): Promise<void> => ipcRenderer.invoke('recovery:save', item),
+  recRemove: (id: string): Promise<void> => ipcRenderer.invoke('recovery:remove', id),
+  recList: (): Promise<unknown[]> => ipcRenderer.invoke('recovery:list'),
+  recOrphans: (dir: string): Promise<OrphanPart[]> => ipcRenderer.invoke('recovery:orphans', dir),
   onOpenSettings: (cb: () => void): (() => void) => {
     const listener = (): void => cb()
     ipcRenderer.on('menu:openSettings', listener)

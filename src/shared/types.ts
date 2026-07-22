@@ -56,6 +56,13 @@ export interface AppSettings {
   embedThumbnail: boolean
 }
 
+/** A leftover partial download file found in the output folder. */
+export interface OrphanPart {
+  title: string
+  file: string
+  size: number
+}
+
 export type DownloadPhase = 'downloading' | 'postprocessing' | 'done' | 'error' | 'canceled' | 'paused'
 
 /** Streamed to the renderer as a download progresses. */

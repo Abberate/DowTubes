@@ -5,10 +5,11 @@ import type {
   DownloadRequest,
   DownloadResult,
   PlaylistInfo,
-  AppSettings
+  AppSettings,
+  OrphanPart
 } from '../../shared/types'
 import type { QueueItem, ItemStatus, QualityOption, SubtitleChoice } from './lib'
-import { errMsg } from './lib'
+import { errMsg, fmtBytes } from './lib'
 import ProbePanel from './ProbePanel'
 import DownloadCard from './DownloadCard'
 import SettingsModal from './Settings'
@@ -20,7 +21,8 @@ import {
   IconRefresh,
   IconAlert,
   IconClipboard,
-  IconSettings
+  IconSettings,
+  IconX
 } from './icons'
 
 const TERMINAL: ItemStatus[] = ['done', 'error', 'canceled']
@@ -51,6 +53,7 @@ export default function App(): JSX.Element {
 
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [orphans, setOrphans] = useState<OrphanPart[]>([])
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const itemsRef = useRef<QueueItem[]>([])
@@ -66,11 +69,17 @@ export default function App(): JSX.Element {
     window.api.defaultOutputDir().then((d) => {
       setOutputDir(d)
       outputDirRef.current = d
+      window.api.recOrphans(d).then(setOrphans)
     })
     window.api.getVersions().then(setVersions)
     window.api.getSettings().then(setSettings)
-    window.api.loadQueue().then((saved) => {
-      const restored = (saved as QueueItem[]).map((i) =>
+    // Merge the queue with per-download recovery records: interrupted downloads
+    // survive even if queue.json was lost, and auto-resume (they carry the URL).
+    Promise.all([window.api.loadQueue(), window.api.recList()]).then(([saved, records]) => {
+      const items = saved as QueueItem[]
+      const seen = new Set(items.map((i) => i.id))
+      const recovered = (records as QueueItem[]).filter((r) => r && r.id && !seen.has(r.id))
+      const restored = [...items, ...recovered].map((i) =>
         i.status === 'downloading' || i.status === 'postprocessing' || i.status === 'queued'
           ? { ...i, status: 'queued' as ItemStatus, progress: null }
           : { ...i, progress: null }
@@ -165,6 +174,7 @@ export default function App(): JSX.Element {
           : i
       )
     )
+    if (res.ok) window.api.recRemove(item.id) // completed → no longer needs recovery
   }
 
   // ── entry ────────────────────────────────────────────────────────────────
@@ -280,6 +290,7 @@ export default function App(): JSX.Element {
       showToast('Déjà dans la liste')
     } else {
       setItems((prev) => [item, ...prev])
+      window.api.recSave({ ...item, progress: null })
       showToast('Téléchargement ajouté')
     }
     closeProbe()
@@ -298,6 +309,7 @@ export default function App(): JSX.Element {
       return
     }
     setItems((prev) => [item, ...prev])
+    window.api.recSave({ ...item, progress: null })
     showToast(`${opt.label} ajouté`)
   }
 
@@ -314,6 +326,7 @@ export default function App(): JSX.Element {
       .filter((i) => !active.has(dupeKey(i)))
     if (fresh.length) {
       setItems((prev) => [...fresh, ...prev])
+      fresh.forEach((i) => window.api.recSave({ ...i, progress: null }))
       showToast(`${fresh.length} vidéo${fresh.length > 1 ? 's' : ''} ajoutée${fresh.length > 1 ? 's' : ''}`)
     }
     closeProbe()
@@ -366,6 +379,7 @@ export default function App(): JSX.Element {
     const it = itemsRef.current.find((i) => i.id === id)
     if (it && (it.status === 'downloading' || it.status === 'postprocessing')) window.api.cancel(id)
     startedRef.current.delete(id)
+    window.api.recRemove(id)
     setItems((prev) => prev.filter((i) => i.id !== id))
   }
   function retryItem(id: string): void {
@@ -409,6 +423,12 @@ export default function App(): JSX.Element {
       outputDirRef.current = d
     }
   }
+
+  const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 18)
+  const visibleOrphans = orphans.filter((o) => {
+    const on = norm(o.title)
+    return on.length > 3 && !items.some((i) => norm(i.title).includes(on) || on.includes(norm(i.title)))
+  })
 
   const activeCount = items.filter((i) => i.status === 'downloading' || i.status === 'postprocessing').length
   const downloadingCount = items.filter((i) => i.status === 'downloading').length
@@ -484,6 +504,38 @@ export default function App(): JSX.Element {
           onDownloadAll={addPlaylistToQueue}
           onClose={closeProbe}
         />
+      )}
+
+      {visibleOrphans.length > 0 && (
+        <div className="recovery-banner">
+          <div className="rec-head">
+            <IconAlert size={16} />
+            <span>
+              <b>
+                {visibleOrphans.length} téléchargement{visibleOrphans.length > 1 ? 's' : ''} incomplet
+                {visibleOrphans.length > 1 ? 's' : ''}
+              </b>{' '}
+              trouvé{visibleOrphans.length > 1 ? 's' : ''} dans ton dossier
+            </span>
+            <button className="icon-btn" title="Ignorer" aria-label="Ignorer" onClick={() => setOrphans([])}>
+              <IconX size={14} />
+            </button>
+          </div>
+          <p className="rec-hint">
+            Recolle le lien de chaque vidéo <b>à la même qualité</b> pour reprendre là où ça s'est arrêté (les octets déjà téléchargés ne sont pas repris de zéro).
+          </p>
+          <ul className="rec-list">
+            {visibleOrphans.map((o) => (
+              <li key={o.file}>
+                <span className="rec-title" title={o.title}>{o.title}</span>
+                <span className="rec-size">{fmtBytes(o.size)}</span>
+              </li>
+            ))}
+          </ul>
+          <button className="btn-ghost" onClick={() => window.api.openPath(outputDir)}>
+            Ouvrir le dossier
+          </button>
+        </div>
       )}
 
       <div className="list-head">

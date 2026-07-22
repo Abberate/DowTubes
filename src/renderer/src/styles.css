@@ -1049,3 +1049,62 @@ input:focus-visible,
   background: var(--border);
   margin: 5px 5px;
 }
+
+/* ── Recovery banner (interrupted downloads) ───────── */
+.recovery-banner {
+  background: var(--surface);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.rec-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+}
+.rec-head > span {
+  flex: 1;
+}
+.rec-head svg {
+  color: var(--accent-text);
+  flex-shrink: 0;
+}
+.rec-hint {
+  margin: 8px 0 11px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.rec-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+.rec-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 8px 11px;
+  font-size: 13px;
+}
+.rec-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rec-size {
+  color: var(--muted);
+  font-family: 'SF Mono', ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  flex-shrink: 0;
+}
