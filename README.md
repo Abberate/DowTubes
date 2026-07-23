@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-1.0.0-ef4444">
+  <img alt="version" src="https://img.shields.io/github/v/release/Abberate/DowTubes?color=ef4444&label=version">
   <img alt="platform" src="https://img.shields.io/badge/macOS%20%7C%20Windows-informational">
   <img alt="electron" src="https://img.shields.io/badge/Electron-43-2c2c34">
   <img alt="license" src="https://img.shields.io/badge/licence-MIT-22c55e">
@@ -37,14 +37,32 @@ file d'attente persistante, pause/reprise, et bien plus.
 
 ## 📥 Installation
 
-Télécharge la dernière version depuis la page **[Releases](../../releases)** :
+Télécharge la dernière version depuis la page **[Releases](../../releases/latest)**, puis suis les étapes de ta plateforme.
 
-| Plateforme | Fichier |
-| --- | --- |
-| **macOS** (Apple Silicon) | `DowTubes-1.0.0-arm64.dmg` — ouvre le DMG, glisse **DowTubes** dans *Applications*. Au 1ᵉʳ lancement : **clic droit → Ouvrir** (app non notarisée). |
-| **Windows** | `DowTubes-Setup-1.0.0.exe` — lance l'installeur. Si SmartScreen s'affiche : *Informations complémentaires → Exécuter quand même*. |
+### 🍎 macOS (puces Apple Silicon — M1/M2/M3/M4)
+
+1. Ouvre `DowTubes-x.y.z-arm64.dmg` et glisse **DowTubes** dans **Applications**.
+2. L'app n'est pas notarisée par Apple : au 1ᵉʳ lancement macOS peut afficher *« endommagé »* ou *« développeur non vérifié »*. Ouvre le **Terminal** et lève la quarantaine :
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/DowTubes.app
+   ```
+3. Double-clique sur **DowTubes**. ✅
+
+> Sur un **Mac Intel**, ce build ne fonctionne pas (architecture arm64 uniquement).
+
+### 🪟 Windows
+
+1. Lance `DowTubes.Setup.x.y.z.exe`.
+2. L'installeur n'est pas signé : si **SmartScreen** s'affiche → *Informations complémentaires* → **Exécuter quand même**.
 
 > yt-dlp, ffmpeg et un runtime Python sont **embarqués** — aucune dépendance à installer.
+
+### 🍪 YouTube : « confirmez que vous n'êtes pas un robot »
+
+Si YouTube réclame une vérification, ouvre **⚙️ Réglages → Cookies du navigateur** et choisis le navigateur où tu es **connecté à YouTube** (Chrome, Firefox, Safari…). L'app réutilise alors tes cookies pour t'authentifier.
+- **Chrome / Edge / Brave** : au 1ᵉʳ usage, macOS demande l'accès au Trousseau → *Toujours autoriser*.
+- **Safari** : nécessite l'*Accès complet au disque* (Réglages Système → Confidentialité et sécurité).
+- **Firefox** : aucune invite — le plus simple.
 
 ## 🚀 Utilisation
 
